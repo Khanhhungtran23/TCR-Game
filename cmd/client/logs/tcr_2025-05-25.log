@@ -1,0 +1,12 @@
+2025/05/25 07:50:49 [2025-05-25 07:50:49] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 07:50:49 [2025-05-25 07:50:49] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 07:50:49 [2025-05-25 07:50:49] [INFO] CLIENT: Client starting...
+2025/05/25 07:50:49 [2025-05-25 07:50:49] [ERROR] CLIENT: Client failed to start: failed to connect: dial tcp 127.0.0.1:8080: connect: connection refused
+2025/05/25 07:55:02 [2025-05-25 07:55:02] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 07:55:02 [2025-05-25 07:55:02] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 07:55:02 [2025-05-25 07:55:02] [INFO] CLIENT: Client starting...
+2025/05/25 07:55:02 [2025-05-25 07:55:02] [ERROR] CLIENT: Client failed to start: failed to connect: dial tcp 127.0.0.1:8080: connect: connection refused
+2025/05/25 07:58:33 [2025-05-25 07:58:33] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 07:58:33 [2025-05-25 07:58:33] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 07:58:33 [2025-05-25 07:58:33] [INFO] CLIENT: Client starting...
+2025/05/25 07:58:33 [2025-05-25 07:58:33] [ERROR] CLIENT: Client failed to start: failed to connect: dial tcp 127.0.0.1:8080: connect: connection refused
