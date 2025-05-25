@@ -1,0 +1,49 @@
+2025/05/25 13:27:16 [2025-05-25 13:27:16] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:27:16 [2025-05-25 13:27:16] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open data/troops.json: no such file or directory
+2025/05/25 13:31:27 [2025-05-25 13:31:27] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:31:27 [2025-05-25 13:31:27] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open data/troops.json: no such file or directory
+2025/05/25 13:32:18 [2025-05-25 13:32:18] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:32:18 [2025-05-25 13:32:18] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open data/data/troops.json: no such file or directory
+2025/05/25 13:33:22 [2025-05-25 13:33:22] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:33:22 [2025-05-25 13:33:22] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open ../data/troops.json: no such file or directory
+2025/05/25 13:37:37 [2025-05-25 13:37:37] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:37:37 [2025-05-25 13:37:37] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open ../data/troops.json: no such file or directory
+2025/05/25 13:38:28 [2025-05-25 13:38:28] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:38:28 [2025-05-25 13:38:28] [FATAL] SERVER: Failed to initialize data manager: failed to load game specs: failed to read troops file: open ../data/troops.json: no such file or directory
+2025/05/25 13:38:58 [2025-05-25 13:38:58] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:38:58 [2025-05-25 13:38:58] [INFO] SERVER: Data manager initialized successfully
+2025/05/25 13:38:58 [2025-05-25 13:38:58] [INFO] SERVER: Starting server on localhost:8080
+2025/05/25 13:38:58 [2025-05-25 13:38:58] [INFO] SERVER: Server started and listening on localhost:8080
+2025/05/25 13:39:11 [2025-05-25 13:39:11] [INFO] SERVER: New client connected: client_1748155151196903000 from 127.0.0.1:55917
+2025/05/25 13:41:36 [2025-05-25 13:41:36] [INFO] SERVER: Client disconnected: client_1748155151196903000
+2025/05/25 13:41:42 [2025-05-25 13:41:42] [INFO] SERVER: New client connected: client_1748155302149929000 from 127.0.0.1:57773
+2025/05/25 13:41:52 [2025-05-25 13:41:52] [INFO] SERVER: Player khanhhung registered successfully
+2025/05/25 13:46:50 [2025-05-25 13:46:50] [INFO] SERVER: Player khanhhung added to simple mode queue
+2025/05/25 13:46:58 [2025-05-25 13:46:58] [INFO] SERVER: Removed inactive client: client_1748155302149929000
+2025/05/25 13:46:58 [2025-05-25 13:46:58] [INFO] SERVER: Client disconnected: client_1748155302149929000
+2025/05/25 13:47:55 [2025-05-25 13:47:55] [INFO] SERVER: New client connected: client_1748155675894868000 from 127.0.0.1:62310
+2025/05/25 13:48:05 [2025-05-25 13:48:05] [INFO] SERVER: Player bao registered successfully
+2025/05/25 13:48:07 [2025-05-25 13:48:07] [INFO] SERVER: Player bao added to simple mode queue
+2025/05/25 13:48:08 [2025-05-25 13:48:08] [INFO] SERVER: Match created: khanhhung vs bao in simple mode
+2025/05/25 13:48:25 [2025-05-25 13:48:25] [INFO] SERVER: New client connected: client_1748155705538916000 from 127.0.0.1:62690
+2025/05/25 13:48:34 [2025-05-25 13:48:34] [INFO] SERVER: Player khanhhung logged in successfully
+2025/05/25 13:48:35 [2025-05-25 13:48:35] [INFO] SERVER: Player khanhhung added to simple mode queue
+2025/05/25 13:49:49 [2025-05-25 13:49:49] [INFO] SERVER: Player bao added to simple mode queue
+2025/05/25 13:49:50 [2025-05-25 13:49:50] [INFO] SERVER: Match created: khanhhung vs bao in simple mode
+2025/05/25 13:49:58 [2025-05-25 13:49:58] [INFO] SERVER: Client disconnected: client_1748155675894868000
+2025/05/25 13:50:02 [2025-05-25 13:50:02] [INFO] SERVER: Client disconnected: client_1748155705538916000
+2025/05/25 13:50:14 [2025-05-25 13:50:14] [INFO] SERVER: Received shutdown signal, stopping server...
+2025/05/25 13:50:18 [2025-05-25 13:50:18] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 13:50:18 [2025-05-25 13:50:18] [INFO] SERVER: Data manager initialized successfully
+2025/05/25 13:50:18 [2025-05-25 13:50:18] [INFO] SERVER: Starting server on localhost:8080
+2025/05/25 13:50:18 [2025-05-25 13:50:18] [INFO] SERVER: Server started and listening on localhost:8080
+2025/05/25 13:50:25 [2025-05-25 13:50:25] [INFO] SERVER: New client connected: client_1748155825277795000 from 127.0.0.1:64137
+2025/05/25 13:50:29 [2025-05-25 13:50:29] [INFO] SERVER: New client connected: client_1748155829137332000 from 127.0.0.1:64183
+2025/05/25 13:50:40 [2025-05-25 13:50:40] [INFO] SERVER: Player bao logged in successfully
+2025/05/25 13:50:52 [2025-05-25 13:50:52] [INFO] SERVER: Player khanhhung logged in successfully
+2025/05/25 13:50:53 [2025-05-25 13:50:53] [INFO] SERVER: Player khanhhung added to simple mode queue
+2025/05/25 13:51:09 [2025-05-25 13:51:09] [INFO] SERVER: Player bao added to simple mode queue
+2025/05/25 13:51:10 [2025-05-25 13:51:10] [INFO] SERVER: Match created: khanhhung vs bao in simple mode
+2025/05/25 13:53:15 [2025-05-25 13:53:15] [INFO] SERVER: Client disconnected: client_1748155825277795000
+2025/05/25 13:53:22 [2025-05-25 13:53:22] [INFO] SERVER: Client disconnected: client_1748155829137332000
+2025/05/25 13:53:28 [2025-05-25 13:53:28] [INFO] SERVER: Received shutdown signal, stopping server...

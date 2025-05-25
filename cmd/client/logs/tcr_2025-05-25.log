@@ -22,3 +22,39 @@
 2025/05/25 13:16:07 [2025-05-25 13:16:07] [INFO] CLIENT: Connecting to server: localhost:8080
 2025/05/25 13:16:07 [2025-05-25 13:16:07] [INFO] CLIENT: Client starting...
 2025/05/25 13:16:07 [2025-05-25 13:16:07] [ERROR] CLIENT: Client failed to start: failed to connect: dial tcp 127.0.0.1:8080: connect: connection refused
+2025/05/25 13:39:11 [2025-05-25 13:39:11] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:39:11 [2025-05-25 13:39:11] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:39:11 [2025-05-25 13:39:11] [INFO] CLIENT: Client starting...
+2025/05/25 13:39:11 [2025-05-25 13:39:11] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:41:36 [2025-05-25 13:41:36] [ERROR] CLIENT: Client failed to start: user quit
+2025/05/25 13:41:42 [2025-05-25 13:41:42] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:41:42 [2025-05-25 13:41:42] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:41:42 [2025-05-25 13:41:42] [INFO] CLIENT: Client starting...
+2025/05/25 13:41:42 [2025-05-25 13:41:42] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:41:52 [2025-05-25 13:41:52] [INFO] CLIENT: Authentication successful for khanhhung
+2025/05/25 13:46:58 [2025-05-25 13:46:58] [ERROR] CLIENT: Lost connection to server
+2025/05/25 13:47:55 [2025-05-25 13:47:55] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:47:55 [2025-05-25 13:47:55] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:47:55 [2025-05-25 13:47:55] [INFO] CLIENT: Client starting...
+2025/05/25 13:47:55 [2025-05-25 13:47:55] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:48:05 [2025-05-25 13:48:05] [INFO] CLIENT: Authentication successful for bao
+2025/05/25 13:48:21 [2025-05-25 13:48:21] [INFO] CLIENT: Received shutdown signal, closing client...
+2025/05/25 13:48:25 [2025-05-25 13:48:25] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:48:25 [2025-05-25 13:48:25] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:48:25 [2025-05-25 13:48:25] [INFO] CLIENT: Client starting...
+2025/05/25 13:48:25 [2025-05-25 13:48:25] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:48:34 [2025-05-25 13:48:34] [INFO] CLIENT: Authentication successful for khanhhung
+2025/05/25 13:49:58 [2025-05-25 13:49:58] [INFO] CLIENT: Received shutdown signal, closing client...
+2025/05/25 13:50:02 [2025-05-25 13:50:02] [INFO] CLIENT: Received shutdown signal, closing client...
+2025/05/25 13:50:25 [2025-05-25 13:50:25] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:50:25 [2025-05-25 13:50:25] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:50:25 [2025-05-25 13:50:25] [INFO] CLIENT: Client starting...
+2025/05/25 13:50:25 [2025-05-25 13:50:25] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:50:29 [2025-05-25 13:50:29] [INFO] CLIENT: Starting Clash Royale TCR Client v1.0.0
+2025/05/25 13:50:29 [2025-05-25 13:50:29] [INFO] CLIENT: Connecting to server: localhost:8080
+2025/05/25 13:50:29 [2025-05-25 13:50:29] [INFO] CLIENT: Client starting...
+2025/05/25 13:50:29 [2025-05-25 13:50:29] [INFO] CLIENT: Connected to server at localhost:8080
+2025/05/25 13:50:40 [2025-05-25 13:50:40] [INFO] CLIENT: Authentication successful for bao
+2025/05/25 13:50:52 [2025-05-25 13:50:52] [INFO] CLIENT: Authentication successful for khanhhung
+2025/05/25 13:53:15 [2025-05-25 13:53:15] [INFO] CLIENT: Received shutdown signal, closing client...
+2025/05/25 13:53:22 [2025-05-25 13:53:22] [INFO] CLIENT: Client shutting down gracefully

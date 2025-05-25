@@ -1,0 +1,46 @@
+{
+  "players": [
+    {
+      "username": "khanhhung",
+      "password": "1234",
+      "level": 1,
+      "exp": 0,
+      "troop_levels": {
+        "Bishop": 1,
+        "Knight": 1,
+        "Pawn": 1,
+        "Prince": 1,
+        "Queen": 1,
+        "Rook": 1
+      },
+      "tower_levels": {
+        "Guard Tower": 1,
+        "King Tower": 1
+      },
+      "games_played": 0,
+      "games_won": 0,
+      "last_login": "2025-05-25T13:50:52.042785+07:00"
+    },
+    {
+      "username": "bao",
+      "password": "1234",
+      "level": 1,
+      "exp": 0,
+      "troop_levels": {
+        "Bishop": 1,
+        "Knight": 1,
+        "Pawn": 1,
+        "Prince": 1,
+        "Queen": 1,
+        "Rook": 1
+      },
+      "tower_levels": {
+        "Guard Tower": 1,
+        "King Tower": 1
+      },
+      "games_played": 0,
+      "games_won": 0,
+      "last_login": "2025-05-25T13:50:40.90176+07:00"
+    }
+  ]
+}

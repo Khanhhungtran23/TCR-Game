@@ -186,7 +186,7 @@ func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, e
 		Password: password,
 		Level:    1,
 		EXP:      0,
-		// Trophies:    0,
+		// Trophies:     0,
 		TroopLevels: make(map[TroopType]int),
 		TowerLevels: make(map[TowerType]int),
 		GamesPlayed: 0,
