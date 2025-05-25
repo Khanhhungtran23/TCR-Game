@@ -177,12 +177,21 @@ func (c *Client) waitForAuth() error {
 // runMainLoop handles the main game menu
 func (c *Client) runMainLoop() error {
 	for {
+		// Check if we're in game first
 		if c.isInGame {
 			// Handle in-game actions
 			if err := c.handleGameplay(); err != nil {
 				c.display.PrintError(fmt.Sprintf("Gameplay error: %v", err))
 				c.isInGame = false
+				continue
 			}
+			continue
+		}
+
+		// Check if waiting for match
+		if c.waitingForMatch {
+			// Just wait and let message handler process responses
+			time.Sleep(100 * time.Millisecond)
 			continue
 		}
 
@@ -224,32 +233,8 @@ func (c *Client) findMatch(gameMode string) {
 		return
 	}
 
-	// Wait for match response
 	c.display.PrintInfo("Waiting for opponent...")
-
-	// Set a flag to wait for match
 	c.waitingForMatch = true
-
-	// Wait up to 30 seconds for match
-	timeout := time.NewTimer(30 * time.Second)
-	defer timeout.Stop()
-
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for c.waitingForMatch {
-		select {
-		case <-timeout.C:
-			c.display.PrintWarning("Match search timed out")
-			c.waitingForMatch = false
-			return
-		case <-ticker.C:
-			if c.isInGame {
-				c.waitingForMatch = false
-				return
-			}
-		}
-	}
 }
 
 // handleGameplay manages in-game interactions
@@ -264,12 +249,14 @@ func (c *Client) handleGameplay() error {
 	// Show current game status
 	c.showGameStatus()
 
-	// Get player action
-	action := c.input.GetGameAction()
+	// Get player action (pass game mode)
+	action := c.input.GetGameAction(c.gameState.GameMode)
 
 	switch action {
 	case "play":
 		return c.handlePlayCard()
+	case "attack":
+		return c.handleAttack()
 	case "info":
 		c.showDetailedGameInfo()
 		return nil
@@ -283,6 +270,36 @@ func (c *Client) handleGameplay() error {
 	}
 }
 
+// handleAttack handles attacking phase
+func (c *Client) handleAttack() error {
+	if len(c.myTroops) == 0 {
+		c.display.PrintWarning("No troops available")
+		return nil
+	}
+
+	// Get enemy towers
+	var enemyTowers []game.Tower
+	if c.gameState.Player1.ID == c.clientID {
+		enemyTowers = c.gameState.Player2.Towers
+	} else {
+		enemyTowers = c.gameState.Player1.Towers
+	}
+
+	// Let user choose attacker and target
+	attackerIndex, targetType, targetIndex, err := c.input.GetAttackChoice(c.myTroops, enemyTowers, c.gameState.GameMode)
+	if err != nil {
+		c.display.PrintWarning(err.Error())
+		return nil
+	}
+
+	selectedTroop := c.myTroops[attackerIndex]
+	targetTower := enemyTowers[targetIndex]
+
+	// Send attack message
+	msg := network.CreateAttackMessage(c.clientID, c.gameState.ID, selectedTroop.Name, targetType, string(targetTower.Name))
+	return c.sendMessage(msg)
+}
+
 // handlePlayCard handles troop summoning
 func (c *Client) handlePlayCard() error {
 	if len(c.myTroops) == 0 {
@@ -290,16 +307,18 @@ func (c *Client) handlePlayCard() error {
 		return nil
 	}
 
-	// Get current mana
-	var currentMana int
-	if c.gameState.Player1.ID == c.clientID {
-		currentMana = c.gameState.Player1.Mana
-	} else {
-		currentMana = c.gameState.Player2.Mana
+	// Get current mana (only for Enhanced mode)
+	var currentMana int = 999 // Default: unlimited for Simple mode
+	if c.gameState.GameMode == game.ModeEnhanced {
+		if c.gameState.Player1.ID == c.clientID {
+			currentMana = c.gameState.Player1.Mana
+		} else {
+			currentMana = c.gameState.Player2.Mana
+		}
 	}
 
-	// Let user choose troop
-	troopIndex, err := c.input.GetTroopChoice(c.myTroops, currentMana)
+	// Let user choose troop (pass game mode)
+	troopIndex, err := c.input.GetTroopChoice(c.myTroops, currentMana, c.gameState.GameMode)
 	if err != nil {
 		c.display.PrintWarning(err.Error())
 		return nil
@@ -345,6 +364,8 @@ func (c *Client) messageHandler() {
 		}
 
 		data := c.reader.Bytes()
+		c.logger.Debug("Received raw message: %s", string(data))
+
 		if err := c.processServerMessage(data); err != nil {
 			c.logger.Error("Error processing server message: %v", err)
 		}
@@ -426,6 +447,8 @@ func (c *Client) handleMatchFound(msg *network.Message) error {
 
 // handleGameStart processes game start notification
 func (c *Client) handleGameStart(msg *network.Message) error {
+	c.logger.Debug("Processing game start message")
+
 	gameStartData, ok := msg.Data["game_start"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("invalid game start format")
@@ -448,10 +471,15 @@ func (c *Client) handleGameStart(msg *network.Message) error {
 		return fmt.Errorf("failed to parse towers: %w", err)
 	}
 
+	// Important: Set game state flags
 	c.isInGame = true
+	c.waitingForMatch = false
+
 	c.display.PrintGameStart(3)
 	c.display.PrintGameMode(c.gameState.GameMode)
+	c.display.PrintInfo("🔥 GAME STARTED! 🔥")
 
+	c.logger.Info("Game started successfully")
 	return nil
 }
 
@@ -533,6 +561,14 @@ func (c *Client) handleGameEnd(msg *network.Message) error {
 func (c *Client) handleTurnChange(msg *network.Message) error {
 	currentTurn, _ := msg.Data["current_turn"].(string)
 
+	// Update game state if provided
+	if gameStateData, exists := msg.Data["game_state"]; exists {
+		gameStateJson, _ := json.Marshal(gameStateData)
+		if err := json.Unmarshal(gameStateJson, &c.gameState); err != nil {
+			c.logger.Error("Failed to parse updated game state: %v", err)
+		}
+	}
+
 	if currentTurn == c.clientID {
 		c.display.PrintInfo("🔥 It's your turn! 🔥")
 	} else {
@@ -576,7 +612,6 @@ func (c *Client) showProfile() {
 	c.display.PrintInfo(fmt.Sprintf("Username: %s", c.player.Username))
 	c.display.PrintInfo(fmt.Sprintf("Level: %d", c.player.Level))
 	c.display.PrintInfo(fmt.Sprintf("EXP: %d", c.player.EXP))
-	// c.display.PrintInfo(fmt.Sprintf("Trophies: %d", c.player.Trophies))
 	c.display.PrintInfo(fmt.Sprintf("Games Played: %d", c.player.GamesPlayed))
 	c.display.PrintInfo(fmt.Sprintf("Games Won: %d", c.player.GamesWon))
 
@@ -588,6 +623,7 @@ func (c *Client) showProfile() {
 	c.input.WaitForEnter("")
 }
 
+// showGameStatus displays current game status
 func (c *Client) showGameStatus() {
 	if c.gameState == nil {
 		return
@@ -596,18 +632,16 @@ func (c *Client) showGameStatus() {
 	// Show basic game info
 	c.display.PrintInfo(fmt.Sprintf("Game Mode: %s", c.gameState.GameMode))
 
+	// Only show mana in Enhanced mode
 	if c.gameState.GameMode == game.ModeEnhanced {
-		c.display.PrintInfo(fmt.Sprintf("Time Left: %d seconds", c.gameState.TimeLeft))
+		var myMana int
+		if c.gameState.Player1.ID == c.clientID {
+			myMana = c.gameState.Player1.Mana
+		} else {
+			myMana = c.gameState.Player2.Mana
+		}
+		c.display.PrintInfo(fmt.Sprintf("Your Mana: %d/%d", myMana, game.MaxMana))
 	}
-
-	// Show mana
-	var myMana int
-	if c.gameState.Player1.ID == c.clientID {
-		myMana = c.gameState.Player1.Mana
-	} else {
-		myMana = c.gameState.Player2.Mana
-	}
-	c.display.PrintInfo(fmt.Sprintf("Your Mana: %d/%d", myMana, game.MaxMana))
 
 	// Show turn info for Simple mode
 	if c.gameState.GameMode == game.ModeSimple {

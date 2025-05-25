@@ -198,6 +198,26 @@ func (d *Display) PrintTroops(troops []game.Troop) {
 	}
 }
 
+// PrintAttackOptions displays attack interface
+func (d *Display) PrintAttackOptions(troops []game.Troop, towers []game.Tower) {
+	d.infoColor.Println("\n=== ATTACK PHASE ===")
+
+	d.infoColor.Println("Your Troops:")
+	for i, troop := range troops {
+		if troop.Name != game.Queen {
+			d.playerColor.Printf("%d. %s (ATK: %d)\n", i+1, troop.Name, troop.ATK)
+		}
+	}
+
+	d.infoColor.Println("\nEnemy Towers:")
+	for i, tower := range towers {
+		if tower.HP > 0 {
+			d.enemyColor.Printf("%d. %s (HP: %d/%d, DEF: %d)\n",
+				i+1, tower.Name, tower.HP, tower.MaxHP, tower.DEF)
+		}
+	}
+}
+
 // PrintError displays error messages
 func (d *Display) PrintError(message string) {
 	d.loseColor.Printf("[ERROR] %s\n", message)

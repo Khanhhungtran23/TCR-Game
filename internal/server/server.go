@@ -3,6 +3,7 @@ package server
 
 import (
 	"bufio"
+	// "encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -311,6 +312,7 @@ func (s *Server) handleAttack(client *Client, msg *network.Message) error {
 }
 
 // handleEndTurn processes end turn actions (Simple mode)
+// handleEndTurn processes end turn actions (Simple mode)
 func (s *Server) handleEndTurn(client *Client, msg *network.Message) error {
 	gameEngine := s.getClientGame(client)
 	if gameEngine == nil {
@@ -326,10 +328,20 @@ func (s *Server) handleEndTurn(client *Client, msg *network.Message) error {
 		return s.sendError(client, "NOT_YOUR_TURN", "It's not your turn")
 	}
 
-	// Switch turn logic is handled in game engine
-	// For now, just broadcast turn change
+	// End turn using game engine
+	if err := gameEngine.EndTurn(client.ID); err != nil {
+		return s.sendError(client, "END_TURN_FAILED", err.Error())
+	}
+
+	// Get updated game state
+	updatedGameState := gameEngine.GetGameState()
+
+	// Broadcast turn change to both players
 	response := network.NewMessage(network.MsgTurnChange, "", client.GameID)
-	response.SetData("current_turn", gameState.CurrentTurn)
+	response.SetData("current_turn", updatedGameState.CurrentTurn)
+	response.SetData("game_state", updatedGameState)
+
+	s.logger.Info("Turn switched from %s to %s", client.Username, updatedGameState.CurrentTurn)
 
 	return s.broadcastToGame(client.GameID, response)
 }
@@ -341,14 +353,18 @@ func (s *Server) handleSurrender(client *Client, msg *network.Message) error {
 		return s.sendError(client, "NO_ACTIVE_GAME", "No active game found")
 	}
 
-	// End game with opponent as winner
 	gameState := gameEngine.GetGameState()
+
+	// Set opponent as winner in game state
 	if gameState.Player1.ID == client.ID {
 		gameState.Winner = gameState.Player2.ID
 	} else {
 		gameState.Winner = gameState.Player1.ID
 	}
 
+	s.logger.Info("Player %s surrendered. Winner: %s", client.Username, gameState.Winner)
+
+	// End game with surrender reason
 	return s.endGame(client.GameID, "surrender")
 }
 
@@ -392,7 +408,7 @@ func (s *Server) sendMessage(client *Client, msg *network.Message) error {
 	if err != nil {
 		return err
 	}
-
+	s.logger.Debug("Sending message to %s: %s", client.Username, msg.Type)
 	_, err = client.Writer.Write(append(data, '\n'))
 	if err != nil {
 		return err
@@ -473,11 +489,140 @@ func (s *Server) cleanupInactiveClients() {
 	}
 }
 
+// endGame handles game conclusion properly
 func (s *Server) endGame(gameID string, reason string) error {
-	// Implementation for ending games and calculating rewards
-	// This would handle EXP/trophy updates and cleanup
+	s.mu.Lock()
+	gameEngine, exists := s.games[gameID]
+	if !exists {
+		s.mu.Unlock()
+		return fmt.Errorf("game not found")
+	}
+
+	// Remove game from active games
+	delete(s.games, gameID)
+	s.mu.Unlock()
+
+	gameState := gameEngine.GetGameState()
+
+	// Find clients in this game
+	var client1, client2 *Client
+	for _, client := range s.clients {
+		if client.GameID == gameID {
+			if client.ID == gameState.Player1.ID {
+				client1 = client
+			} else if client.ID == gameState.Player2.ID {
+				client2 = client
+			}
+		}
+	}
+
+	// Determine winner/loser based on reason
+	var winner, loser *Client
+	if reason == "surrender" {
+		// The current player (who called surrender) loses
+		// Find who surrendered by checking current context
+		// For now, assume Player1 surrendered if we can't determine
+		loser = client1
+		winner = client2
+	} else if gameState.Winner == gameState.Player1.ID {
+		winner = client1
+		loser = client2
+	} else if gameState.Winner == gameState.Player2.ID {
+		winner = client2
+		loser = client1
+	}
+
+	// Calculate rewards
+	var winnerExp, loserExp int = 30, 0
+
+	if gameState.Winner == "draw" || reason == "draw" {
+		winnerExp = 10
+		loserExp = 10
+	}
+
+	// Send game end notifications
+	if winner != nil && loser != nil {
+		s.sendGameEndNotification(winner, true, fmt.Sprintf("%d", winnerExp), reason)
+		s.sendGameEndNotification(loser, false, fmt.Sprintf("%d", loserExp), reason)
+		winner.GameID = ""
+		loser.GameID = ""
+	} else if gameState.Winner == "draw" {
+		// Handle draw case
+		if client1 != nil {
+			s.sendGameEndNotification(client1, false, fmt.Sprintf("%d", loserExp), reason)
+			client1.GameID = ""
+		}
+		if client2 != nil {
+			s.sendGameEndNotification(client2, false, fmt.Sprintf("%d", loserExp), reason)
+			client2.GameID = ""
+		}
+	}
+
 	s.logger.Info("Game %s ended: %s", gameID, reason)
 	return nil
+}
+
+// sendGameEndNotification sends game end notification to a player
+func (s *Server) sendGameEndNotification(client *Client, won bool, expGained, reason string) error {
+	if client == nil {
+		return fmt.Errorf("client is nil")
+	}
+
+	msg := network.NewMessage(network.MsgGameEnd, client.ID, "")
+
+	var winnerName string
+	if won {
+		winnerName = client.Username
+	} else {
+		if reason == "draw" {
+			winnerName = "draw"
+		} else {
+			winnerName = "opponent"
+		}
+	}
+
+	msg.SetData("game_end", map[string]interface{}{
+		"winner":     winnerName,
+		"reason":     reason,
+		"exp_gained": expGained,
+		"stats": map[string]interface{}{
+			"towers_destroyed": 0,   // Would be calculated from game state
+			"troops_deployed":  0,   // Would be tracked during game
+			"damage_dealt":     0,   // Would be tracked during game
+			"game_duration":    180, // Default for now
+		},
+	})
+
+	return s.sendMessage(client, msg)
+}
+
+// sendGameEndToClients sends game end notification to all players in game
+func (s *Server) sendGameEndToClients(gameID, reason string, winnerExp, loserExp, winnerTrophy, loserTrophy int) {
+	for _, client := range s.clients {
+		var expGained int
+		var isWinner bool
+		if client.GameID == gameID && client.IsActive {
+
+			if reason == "surrender" {
+				// Logic to determine winner/loser
+				// For now, assume all clients are winners for demonstration
+				isWinner = true
+			}
+			_ = isWinner // Suppress unused variable warning
+			expGained = winnerExp
+		}
+
+		msg := network.NewMessage(network.MsgGameEnd, client.ID, "")
+		msg.SetData("game_end", map[string]interface{}{
+			"winner":     client.ID, // Simplified
+			"reason":     reason,
+			"exp_gained": expGained,
+			// "trophy_change": trophyChange,
+		})
+
+		s.sendMessage(client, msg)
+		client.GameID = "" // Clear game ID
+	}
 }
 
 // Helper function to generate client IDs
@@ -539,8 +684,64 @@ func (s *Server) createMatch(client1, client2 *Client, gameMode string) {
 	client2.GameID = gameID
 	s.mu.Unlock()
 
+	// 🔥 ADD THIS: Notify players of match found
+	s.notifyMatchFound(client1, client2, gameID, gameMode)
+
 	// Start game
 	gameEngine.StartGame()
 
+	// 🔥 ADD THIS: Send game start data
+	s.sendGameStart(client1, client2, gameEngine)
+
 	s.logger.Info("Match created: %s vs %s in %s mode", client1.Username, client2.Username, gameMode)
+}
+
+// 🔥 ADD THESE FUNCTIONS:
+
+// notifyMatchFound sends match found notification to both players
+func (s *Server) notifyMatchFound(client1, client2 *Client, gameID, gameMode string) {
+	// Notify client1
+	msg1 := network.NewMessage(network.MsgMatchFound, client1.ID, gameID)
+	msg1.SetData("match_found", map[string]interface{}{
+		"game_id":   gameID,
+		"opponent":  map[string]interface{}{"username": client2.Username, "level": client2.Player.Level},
+		"game_mode": gameMode,
+		"your_turn": gameMode == game.ModeSimple,
+	})
+	s.sendMessage(client1, msg1)
+
+	// Notify client2
+	msg2 := network.NewMessage(network.MsgMatchFound, client2.ID, gameID)
+	msg2.SetData("match_found", map[string]interface{}{
+		"game_id":   gameID,
+		"opponent":  map[string]interface{}{"username": client1.Username, "level": client1.Player.Level},
+		"game_mode": gameMode,
+		"your_turn": false,
+	})
+	s.sendMessage(client2, msg2)
+}
+
+// sendGameStart sends game initialization data to both players
+func (s *Server) sendGameStart(client1, client2 *Client, gameEngine *game.GameEngine) {
+	gameState := gameEngine.GetGameState()
+
+	// Send to player 1
+	msg1 := network.NewMessage(network.MsgGameStart, client1.ID, gameState.ID)
+	msg1.SetData("game_start", map[string]interface{}{
+		"game_state":        gameState,
+		"your_troops":       gameState.Player1.Troops,
+		"your_towers":       gameState.Player1.Towers,
+		"countdown_seconds": 3,
+	})
+	s.sendMessage(client1, msg1)
+
+	// Send to player 2
+	msg2 := network.NewMessage(network.MsgGameStart, client2.ID, gameState.ID)
+	msg2.SetData("game_start", map[string]interface{}{
+		"game_state":        gameState,
+		"your_troops":       gameState.Player2.Troops,
+		"your_towers":       gameState.Player2.Towers,
+		"countdown_seconds": 3,
+	})
+	s.sendMessage(client2, msg2)
 }

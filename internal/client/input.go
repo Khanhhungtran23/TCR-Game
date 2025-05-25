@@ -86,7 +86,7 @@ func (ih *InputHandler) GetUsername() string {
 }
 
 // GetTroopChoice gets and validates troop selection from available troops
-func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int) (int, error) {
+func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int, gameMode string) (int, error) {
 	if len(troops) == 0 {
 		return -1, fmt.Errorf("no troops available")
 	}
@@ -96,9 +96,18 @@ func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int) (
 	playableTroops := make([]int, 0)
 
 	for i, troop := range troops {
-		if troop.MANA <= availableMana {
-			ih.display.PrintInfo(fmt.Sprintf("%d. %s (Cost: %d, HP: %d, ATK: %d) ✓",
-				i+1, troop.Name, troop.MANA, troop.HP, troop.ATK))
+		// In Simple mode, all troops are playable (no mana cost)
+		// In Enhanced mode, check mana cost
+		isPlayable := gameMode == "simple" || troop.MANA <= availableMana
+
+		if isPlayable {
+			if gameMode == "enhanced" {
+				ih.display.PrintInfo(fmt.Sprintf("%d. %s (Cost: %d, HP: %d, ATK: %d) ✓",
+					i+1, troop.Name, troop.MANA, troop.HP, troop.ATK))
+			} else {
+				ih.display.PrintInfo(fmt.Sprintf("%d. %s (HP: %d, ATK: %d) ✓",
+					i+1, troop.Name, troop.HP, troop.ATK))
+			}
 			playableTroops = append(playableTroops, i)
 		} else {
 			ih.display.PrintWarning(fmt.Sprintf("%d. %s (Cost: %d, HP: %d, ATK: %d) ❌ Not enough mana",
@@ -107,7 +116,11 @@ func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int) (
 	}
 
 	if len(playableTroops) == 0 {
-		return -1, fmt.Errorf("no playable troops with current mana (%d)", availableMana)
+		if gameMode == "enhanced" {
+			return -1, fmt.Errorf("no playable troops with current mana (%d)", availableMana)
+		} else {
+			return -1, fmt.Errorf("no troops available")
+		}
 	}
 
 	// Get choice
@@ -124,7 +137,11 @@ func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int) (
 		}
 
 		if !isPlayable {
-			ih.display.PrintWarning("Not enough mana to play that troop. Choose another troop.")
+			if gameMode == "enhanced" {
+				ih.display.PrintWarning("Not enough mana to play that troop. Choose another troop.")
+			} else {
+				ih.display.PrintWarning("Invalid troop selection. Choose another troop.")
+			}
 			continue
 		}
 
@@ -219,15 +236,23 @@ func (ih *InputHandler) GetIntegerInput(prompt string, min, max int) int {
 }
 
 // GetGameAction gets and validates game actions during gameplay
-func (ih *InputHandler) GetGameAction() string {
-	validActions := []string{"play", "end", "surrender", "info"}
+func (ih *InputHandler) GetGameAction(gameMode string) string {
+	validActions := []string{"play", "attack", "surrender", "info"}
+
+	// Add "end" action only for Simple mode
+	if gameMode == "simple" {
+		validActions = append(validActions, "end")
+	}
 
 	for {
 		ih.display.PrintInfo("Available actions:")
-		ih.display.PrintInfo("1. 'play' - Play a card")
-		ih.display.PrintInfo("2. 'end' - End turn")
-		ih.display.PrintInfo("3. 'surrender' - Surrender the match")
-		ih.display.PrintInfo("4. 'info' - Show game information")
+		ih.display.PrintInfo("1. 'play' - Deploy a troop")
+		ih.display.PrintInfo("2. 'attack' - Attack with deployed troops")
+		if gameMode == "simple" {
+			ih.display.PrintInfo("3. 'end' - End turn")
+		}
+		ih.display.PrintInfo("4. 'surrender' - Surrender the match")
+		ih.display.PrintInfo("5. 'info' - Show game information")
 
 		fmt.Print("Enter action: ")
 
@@ -248,12 +273,116 @@ func (ih *InputHandler) GetGameAction() string {
 		}
 
 		if !isValid {
-			ih.display.PrintWarning("Invalid action. Please choose from: play, end, surrender, info")
+			if gameMode == "simple" {
+				ih.display.PrintWarning("Invalid action. Please choose from: play, attack, end, surrender, info")
+			} else {
+				ih.display.PrintWarning("Invalid action. Please choose from: play, attack, surrender, info")
+			}
 			continue
 		}
 
 		return action
 	}
+}
+
+// GetAttackChoice lets player choose attacker and target
+func (ih *InputHandler) GetAttackChoice(myTroops []game.Troop, enemyTowers []game.Tower, gameMode string) (attackerIndex int, targetType string, targetIndex int, err error) {
+	// Show available attackers
+	ih.display.PrintInfo("Choose your attacker:")
+	availableAttackers := make([]int, 0)
+
+	for i, troop := range myTroops {
+		// Skip Queen as it can't attack
+		if troop.Name != game.Queen {
+			ih.display.PrintInfo(fmt.Sprintf("%d. %s (ATK: %d)", i+1, troop.Name, troop.ATK))
+			availableAttackers = append(availableAttackers, i)
+		}
+	}
+
+	if len(availableAttackers) == 0 {
+		return -1, "", -1, fmt.Errorf("no troops available for attack")
+	}
+
+	// Get attacker choice
+	for {
+		attackerChoice := ih.GetMenuChoice(1, len(myTroops)) - 1
+
+		// Check if valid attacker
+		isValidAttacker := false
+		for _, validIndex := range availableAttackers {
+			if attackerChoice == validIndex {
+				isValidAttacker = true
+				break
+			}
+		}
+
+		if !isValidAttacker {
+			ih.display.PrintWarning("Invalid attacker. Choose a troop that can attack.")
+			continue
+		}
+
+		attackerIndex = attackerChoice
+		break
+	}
+
+	// Show available targets
+	ih.display.PrintInfo("Choose your target:")
+	availableTargets := make([]int, 0)
+
+	for i, tower := range enemyTowers {
+		if tower.HP > 0 {
+			// Simple mode: enforce targeting rules
+			if gameMode == "simple" && tower.Name == game.KingTower {
+				// Check if Guard Towers are still alive
+				guardTowersAlive := false
+				for _, t := range enemyTowers {
+					if t.Name == game.GuardTower && t.HP > 0 {
+						guardTowersAlive = true
+						break
+					}
+				}
+
+				if guardTowersAlive {
+					ih.display.PrintWarning(fmt.Sprintf("%d. %s (HP: %d/%d) ❌ Must destroy Guard Towers first",
+						i+1, tower.Name, tower.HP, tower.MaxHP))
+					continue
+				}
+			}
+
+			ih.display.PrintInfo(fmt.Sprintf("%d. %s (HP: %d/%d)",
+				i+1, tower.Name, tower.HP, tower.MaxHP))
+			availableTargets = append(availableTargets, i)
+		}
+	}
+
+	if len(availableTargets) == 0 {
+		return -1, "", -1, fmt.Errorf("no valid targets available")
+	}
+
+	// Get target choice
+	for {
+		targetChoice := ih.GetMenuChoice(1, len(enemyTowers)) - 1
+
+		// Check if valid target
+		isValidTarget := false
+		for _, validIndex := range availableTargets {
+			if targetChoice == validIndex {
+				isValidTarget = true
+				break
+			}
+		}
+
+		if !isValidTarget {
+			ih.display.PrintWarning("Invalid target. Choose an available target.")
+			continue
+		}
+
+		targetIndex = targetChoice
+		targetType = "tower"
+		break
+	}
+
+	return attackerIndex, targetType, targetIndex, nil
 }
 
 // ShowTypingEffect simulates typing effect for dramatic messages

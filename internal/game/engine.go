@@ -112,13 +112,14 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		return nil, fmt.Errorf("troop not available")
 	}
 
-	// Check mana cost
-	if player.Mana < selectedTroop.MANA {
-		return nil, fmt.Errorf("insufficient mana: need %d, have %d", selectedTroop.MANA, player.Mana)
+	// Check mana cost (Enhanced mode only)
+	if ge.gameState.GameMode == ModeEnhanced {
+		if player.Mana < selectedTroop.MANA {
+			return nil, fmt.Errorf("insufficient mana: need %d, have %d", selectedTroop.MANA, player.Mana)
+		}
+		// Deduct mana only in Enhanced mode
+		player.Mana -= selectedTroop.MANA
 	}
-
-	// Deduct mana
-	player.Mana -= selectedTroop.MANA
 
 	// Handle special troops (Queen)
 	if troopName == Queen {
@@ -401,6 +402,26 @@ func (ge *GameEngine) checkWinConditions() bool {
 	}
 
 	return false
+}
+
+// EndTurn handles ending a player's turn (Simple mode only)
+func (ge *GameEngine) EndTurn(playerID string) error {
+	if ge.gameState.GameMode != ModeSimple {
+		return fmt.Errorf("end turn only available in Simple mode")
+	}
+
+	if ge.gameState.CurrentTurn != playerID {
+		return fmt.Errorf("not your turn")
+	}
+
+	// Switch to next player
+	ge.switchTurn()
+
+	ge.logEvent("TURN_END", playerID, map[string]interface{}{
+		"next_turn": ge.gameState.CurrentTurn,
+	})
+
+	return nil
 }
 
 // endGameByTimeout ends game when time runs out (Enhanced mode)
