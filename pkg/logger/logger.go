@@ -4,7 +4,7 @@ package logger
 import (
 	"fmt"
 	"io"
-	"log"
+	"log" // for logging
 	"os"
 	"sync"
 	"time"
@@ -14,7 +14,7 @@ import (
 type LogLevel int
 
 const (
-	// DEBUG level for verbose development information
+	// DEBUG level for verbose development information - 0
 	DEBUG LogLevel = iota
 	// INFO level for general operational information
 	INFO

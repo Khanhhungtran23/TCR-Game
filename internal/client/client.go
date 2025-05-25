@@ -188,8 +188,10 @@ func (c *Client) runMainLoop() error {
 		c.display.PrintSeparator()
 		c.display.PrintInfo("🎮 CLASH ROYALE TCR 🎮")
 		c.display.PrintInfo(fmt.Sprintf("Welcome, %s!", c.player.Username))
-		c.display.PrintInfo(fmt.Sprintf("Level: %d | EXP: %d | Trophies: %d",
-			c.player.Level, c.player.EXP, c.player.Trophies))
+		// c.display.PrintInfo(fmt.Sprintf("Level: %d | EXP: %d | Trophies: %d",
+		// 	c.player.Level, c.player.EXP, c.player.Trophies))
+		c.display.PrintInfo(fmt.Sprintf("Level: %d | EXP: %d",
+			c.player.Level, c.player.EXP))
 		c.display.PrintInfo("")
 		c.display.PrintInfo("1. Find Match (Simple TCR)")
 		c.display.PrintInfo("2. Find Match (Enhanced TCR)")
@@ -547,7 +549,7 @@ func (c *Client) showProfile() {
 	c.display.PrintInfo(fmt.Sprintf("Username: %s", c.player.Username))
 	c.display.PrintInfo(fmt.Sprintf("Level: %d", c.player.Level))
 	c.display.PrintInfo(fmt.Sprintf("EXP: %d", c.player.EXP))
-	c.display.PrintInfo(fmt.Sprintf("Trophies: %d", c.player.Trophies))
+	// c.display.PrintInfo(fmt.Sprintf("Trophies: %d", c.player.Trophies))
 	c.display.PrintInfo(fmt.Sprintf("Games Played: %d", c.player.GamesPlayed))
 	c.display.PrintInfo(fmt.Sprintf("Games Won: %d", c.player.GamesWon))
 

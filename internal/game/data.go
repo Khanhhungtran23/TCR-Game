@@ -182,11 +182,11 @@ func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, e
 
 	// Create new player with default values
 	newPlayer := PlayerData{
-		Username:    username,
-		Password:    password,
-		Level:       1,
-		EXP:         0,
-		Trophies:    0,
+		Username: username,
+		Password: password,
+		Level:    1,
+		EXP:      0,
+		// Trophies:    0,
 		TroopLevels: make(map[TroopType]int),
 		TowerLevels: make(map[TowerType]int),
 		GamesPlayed: 0,
@@ -219,7 +219,7 @@ func (dm *DataManager) UpdatePlayerData(username string, expGained int, won bool
 		if player.Username == username {
 			// Update statistics
 			player.EXP += expGained
-			player.Trophies += trophyChange
+			// player.Trophies += trophyChange
 			player.GamesPlayed++
 			if won {
 				player.GamesWon++
@@ -268,11 +268,11 @@ func (dm *DataManager) CreatePlayerForGame(playerData *PlayerData, playerID stri
 		Username: playerData.Username,
 		Level:    playerData.Level,
 		EXP:      playerData.EXP,
-		Trophies: playerData.Trophies,
-		Mana:     StartingMana,
-		MaxMana:  MaxMana,
-		Troops:   dm.generateRandomTroops(playerData),
-		Towers:   dm.generateTowers(playerData),
+		// Trophies: playerData.Trophies,
+		Mana:    StartingMana,
+		MaxMana: MaxMana,
+		Troops:  dm.generateRandomTroops(playerData),
+		Towers:  dm.generateTowers(playerData),
 	}
 
 	return player

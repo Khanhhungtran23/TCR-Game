@@ -162,8 +162,10 @@ func (d *Display) PrintPlayerStatus(player game.Player, isCurrentPlayer bool) {
 		colorFunc = d.enemyColor
 	}
 
-	colorFunc.Printf("Player: %s | Level: %d | Trophies: %d | Mana: %d/%d\n",
-		player.Username, player.Level, player.Trophies, player.Mana, player.MaxMana)
+	// colorFunc.Printf("Player: %s | Level: %d | Trophies: %d | Mana: %d/%d\n",
+	// 	player.Username, player.Level, player.Trophies, player.Mana, player.MaxMana)
+	colorFunc.Printf("Player: %s | Level: %d | Mana: %d/%d\n",
+		player.Username, player.Level, player.Mana, player.MaxMana)
 }
 
 // PrintTowerStatus displays tower health

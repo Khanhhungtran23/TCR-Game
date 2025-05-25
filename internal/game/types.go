@@ -4,6 +4,7 @@ import "time"
 
 type TroopType string
 
+// TroopType represents the type and name of troop
 const (
 	Pawn   TroopType = "Pawn"
 	Bishop TroopType = "Bishop"
@@ -15,6 +16,7 @@ const (
 
 type TowerType string
 
+// TowerType represents the type and name of tower
 const (
 	KingTower  TowerType = "King Tower"
 	GuardTower TowerType = "Guard Tower"
@@ -25,6 +27,7 @@ type Troop struct {
 	HP      int       `json:"hp"`
 	ATK     int       `json:"atk"`
 	DEF     int       `json:"def"`
+	CRIT    float64   `json:"crit"` // Crit chance as percentage (E.g : 10% = 0.10)
 	MANA    int       `json:"mana"`
 	EXP     int       `json:"exp"`
 	Special string    `json:"special,omitempty"`
@@ -44,16 +47,16 @@ type Tower struct {
 }
 
 type Player struct {
-	ID       string  `json:"id"`
-	Username string  `json:"username"`
-	Password string  `json:"password,omitempty"` // Omit in network messages
-	Level    int     `json:"level"`
-	EXP      int     `json:"exp"`
-	Trophies int     `json:"trophies"`
-	Mana     int     `json:"mana"`
-	MaxMana  int     `json:"max_mana"`
-	Troops   []Troop `json:"troops"` // 3 random troops for this match
-	Towers   []Tower `json:"towers"` // 3 towers: 1 King + 2 Guard
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Password string `json:"password,omitempty"` // Omit in network messages
+	Level    int    `json:"level"`
+	EXP      int    `json:"exp"`
+	// Trophies int     `json:"trophies"`
+	Mana    int     `json:"mana"`
+	MaxMana int     `json:"max_mana"`
+	Troops  []Troop `json:"troops"` // 3 random troops for this match
+	Towers  []Tower `json:"towers"` // 3 towers: 1 King + 2 Guard
 }
 
 type GameState struct {
@@ -76,7 +79,7 @@ type CombatAction struct {
 	Type       string                 `json:"type"` // "attack", "summon", "heal"
 	PlayerID   string                 `json:"player_id"`
 	TroopName  TroopType              `json:"troop_name,omitempty"`
-	TargetType string                 `json:"target_type"` // "tower", "troop"
+	TargetType string                 `json:"target_type"` // "tower"
 	TargetName string                 `json:"target_name"`
 	Damage     int                    `json:"damage,omitempty"`
 	IsCrit     bool                   `json:"is_crit,omitempty"`
@@ -93,12 +96,13 @@ type GameSpecs struct {
 
 // TroopSpec defines base specifications for each troop type
 type TroopSpec struct {
-	HP      int    `json:"hp"`
-	ATK     int    `json:"atk"`
-	DEF     int    `json:"def"`
-	MANA    int    `json:"mana"`
-	EXP     int    `json:"exp"`
-	Special string `json:"special,omitempty"`
+	HP      int     `json:"hp"`
+	ATK     int     `json:"atk"`
+	DEF     int     `json:"def"`
+	CRIT    float64 `json:"crit"`
+	MANA    int     `json:"mana"`
+	EXP     int     `json:"exp"`
+	Special string  `json:"special,omitempty"`
 }
 
 // TowerSpec defines base specifications for each tower type
@@ -112,11 +116,11 @@ type TowerSpec struct {
 
 // PlayerData represents persistent player data
 type PlayerData struct {
-	Username    string            `json:"username"`
-	Password    string            `json:"password"`
-	Level       int               `json:"level"`
-	EXP         int               `json:"exp"`
-	Trophies    int               `json:"trophies"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+	Level    int    `json:"level"`
+	EXP      int    `json:"exp"`
+	// Trophies    int               `json:"trophies"`
 	TroopLevels map[TroopType]int `json:"troop_levels"`
 	TowerLevels map[TowerType]int `json:"tower_levels"`
 	GamesPlayed int               `json:"games_played"`
