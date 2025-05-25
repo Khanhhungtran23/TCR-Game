@@ -307,4 +307,4 @@ This is an academic project. For improvements or bug fixes, please follow standa
 
 ---
 
-**Built with ❤️ in Go for IT096IU Network Programming Course**
+**Built with ❤️ in Go for IT096IU Network Centric Course**
