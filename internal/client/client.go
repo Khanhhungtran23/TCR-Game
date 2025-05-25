@@ -6,8 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	// "strconv"
-	// "strings"
+
 	"time"
 
 	"tcr-game/internal/game"
@@ -17,32 +16,34 @@ import (
 
 // Client represents the game client
 type Client struct {
-	conn        net.Conn
-	display     *Display
-	input       *InputHandler
-	player      *game.PlayerData
-	gameState   *game.GameState
-	myTroops    []game.Troop
-	myTowers    []game.Tower
-	isConnected bool
-	isInGame    bool
-	logger      *logger.Logger
-	writer      *bufio.Writer
-	reader      *bufio.Scanner
-	serverAddr  string
-	clientID    string
+	conn            net.Conn
+	display         *Display
+	input           *InputHandler
+	player          *game.PlayerData
+	gameState       *game.GameState
+	myTroops        []game.Troop
+	myTowers        []game.Tower
+	isConnected     bool
+	isInGame        bool
+	waitingForMatch bool
+	logger          *logger.Logger
+	writer          *bufio.Writer
+	reader          *bufio.Scanner
+	serverAddr      string
+	clientID        string
 }
 
 // NewClient creates a new client instance
 func NewClient(serverAddr string) *Client {
 	display := NewDisplay()
 	return &Client{
-		display:     display,
-		input:       NewInputHandler(display),
-		logger:      logger.Client,
-		isConnected: false,
-		isInGame:    false,
-		serverAddr:  serverAddr,
+		display:         display,
+		input:           NewInputHandler(display),
+		logger:          logger.Client,
+		isConnected:     false,
+		isInGame:        false,
+		waitingForMatch: false,
+		serverAddr:      serverAddr,
 	}
 }
 
@@ -155,19 +156,20 @@ func (c *Client) handleRegister() error {
 
 // waitForAuth waits for authentication response
 func (c *Client) waitForAuth() error {
-	// Simple blocking wait - in a real implementation you'd use channels
 	timeout := time.NewTimer(10 * time.Second)
 	defer timeout.Stop()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case <-timeout.C:
 			return fmt.Errorf("authentication timeout")
-		default:
+		case <-ticker.C:
 			if c.player != nil {
 				return nil
 			}
-			time.Sleep(100 * time.Millisecond)
 		}
 	}
 }
@@ -188,8 +190,6 @@ func (c *Client) runMainLoop() error {
 		c.display.PrintSeparator()
 		c.display.PrintInfo("🎮 CLASH ROYALE TCR 🎮")
 		c.display.PrintInfo(fmt.Sprintf("Welcome, %s!", c.player.Username))
-		// c.display.PrintInfo(fmt.Sprintf("Level: %d | EXP: %d | Trophies: %d",
-		// 	c.player.Level, c.player.EXP, c.player.Trophies))
 		c.display.PrintInfo(fmt.Sprintf("Level: %d | EXP: %d",
 			c.player.Level, c.player.EXP))
 		c.display.PrintInfo("")
@@ -224,8 +224,32 @@ func (c *Client) findMatch(gameMode string) {
 		return
 	}
 
-	// Wait for match (handled by messageHandler)
+	// Wait for match response
 	c.display.PrintInfo("Waiting for opponent...")
+
+	// Set a flag to wait for match
+	c.waitingForMatch = true
+
+	// Wait up to 30 seconds for match
+	timeout := time.NewTimer(30 * time.Second)
+	defer timeout.Stop()
+
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for c.waitingForMatch {
+		select {
+		case <-timeout.C:
+			c.display.PrintWarning("Match search timed out")
+			c.waitingForMatch = false
+			return
+		case <-ticker.C:
+			if c.isInGame {
+				c.waitingForMatch = false
+				return
+			}
+		}
+	}
 }
 
 // handleGameplay manages in-game interactions
@@ -334,6 +358,8 @@ func (c *Client) processServerMessage(data []byte) error {
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
+	c.logger.Debug("Received message type: %s", msg.Type)
+
 	switch msg.Type {
 	case network.MsgAuthOK:
 		return c.handleAuthSuccess(msg)
@@ -394,6 +420,7 @@ func (c *Client) handleAuthFail(msg *network.Message) error {
 // handleMatchFound processes match found notification
 func (c *Client) handleMatchFound(msg *network.Message) error {
 	c.display.PrintInfo("Match found! Preparing for battle...")
+	c.waitingForMatch = false
 	return nil
 }
 

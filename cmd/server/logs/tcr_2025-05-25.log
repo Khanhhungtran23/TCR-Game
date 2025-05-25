@@ -47,3 +47,20 @@
 2025/05/25 13:53:15 [2025-05-25 13:53:15] [INFO] SERVER: Client disconnected: client_1748155825277795000
 2025/05/25 13:53:22 [2025-05-25 13:53:22] [INFO] SERVER: Client disconnected: client_1748155829137332000
 2025/05/25 13:53:28 [2025-05-25 13:53:28] [INFO] SERVER: Received shutdown signal, stopping server...
+2025/05/25 14:05:45 [2025-05-25 14:05:45] [INFO] SERVER: Starting Clash Royale TCR Server v1.0.0
+2025/05/25 14:05:45 [2025-05-25 14:05:45] [INFO] SERVER: Data manager initialized successfully
+2025/05/25 14:05:45 [2025-05-25 14:05:45] [INFO] SERVER: Starting server on localhost:8080
+2025/05/25 14:05:45 [2025-05-25 14:05:45] [INFO] SERVER: Server started and listening on localhost:8080
+2025/05/25 14:05:55 [2025-05-25 14:05:55] [INFO] SERVER: New client connected: client_1748156755792872000 from 127.0.0.1:59258
+2025/05/25 14:06:00 [2025-05-25 14:06:00] [INFO] SERVER: New client connected: client_1748156760365722000 from 127.0.0.1:59313
+2025/05/25 14:06:08 [2025-05-25 14:06:08] [INFO] SERVER: Player khanhhung logged in successfully
+2025/05/25 14:06:16 [2025-05-25 14:06:16] [INFO] SERVER: Player bao logged in successfully
+2025/05/25 14:06:18 [2025-05-25 14:06:18] [INFO] SERVER: Player bao added to simple mode queue
+2025/05/25 14:06:21 [2025-05-25 14:06:21] [INFO] SERVER: Player khanhhung added to simple mode queue
+2025/05/25 14:06:21 [2025-05-25 14:06:21] [INFO] SERVER: Match created: bao vs khanhhung in simple mode
+2025/05/25 14:06:59 [2025-05-25 14:06:59] [INFO] SERVER: Player khanhhung added to simple mode queue
+2025/05/25 14:07:02 [2025-05-25 14:07:02] [INFO] SERVER: Player bao added to simple mode queue
+2025/05/25 14:07:02 [2025-05-25 14:07:02] [INFO] SERVER: Match created: khanhhung vs bao in simple mode
+2025/05/25 14:07:16 [2025-05-25 14:07:16] [INFO] SERVER: Client disconnected: client_1748156755792872000
+2025/05/25 14:07:19 [2025-05-25 14:07:19] [INFO] SERVER: Client disconnected: client_1748156760365722000
+2025/05/25 14:07:23 [2025-05-25 14:07:23] [INFO] SERVER: Received shutdown signal, stopping server...
