@@ -147,9 +147,9 @@ func (l *Logger) log(level LogLevel, format string, args ...interface{}) {
 	defer l.mu.Unlock()
 
 	// Format the log message
-	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	// timestamp := time.Now().Format("2006-01-02 15:04:05")
 	message := fmt.Sprintf(format, args...)
-	logMessage := fmt.Sprintf("[%s] [%s] %s: %s", timestamp, level.String(), l.prefix, message)
+	logMessage := fmt.Sprintf("[%s] %s: %s", level.String(), l.prefix, message)
 
 	// Log the message
 	l.logger.Println(logMessage)
