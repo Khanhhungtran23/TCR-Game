@@ -53,10 +53,11 @@ type Player struct {
 	Level    int    `json:"level"`
 	EXP      int    `json:"exp"`
 	// Trophies int     `json:"trophies"`
-	Mana    int     `json:"mana"`
-	MaxMana int     `json:"max_mana"`
-	Troops  []Troop `json:"troops"` // 3 random troops for this match
-	Towers  []Tower `json:"towers"` // 3 towers: 1 King + 2 Guard
+	Mana                   int     `json:"mana"`
+	MaxMana                int     `json:"max_mana"`
+	Troops                 []Troop `json:"troops"` // 3 random troops for this match
+	Towers                 []Tower `json:"towers"` // 3 towers: 1 King + 2 Guard
+	TroopsDeployedThisTurn int     `json:"troops_deployed_this_turn"`
 }
 
 type GameState struct {

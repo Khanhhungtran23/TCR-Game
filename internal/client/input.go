@@ -414,3 +414,33 @@ func (ih *InputHandler) ClearInputBuffer() {
 	// Create a new scanner to clear buffer
 	ih.scanner = bufio.NewScanner(os.Stdin)
 }
+
+func (ih *InputHandler) GetGameActionWithDebug(gameMode string) string {
+	for {
+		ih.display.PrintInfo("\n=== GAME ACTIONS ===")
+		ih.display.PrintInfo("play - Deploy a troop")
+		ih.display.PrintInfo("attack - Attack with troop")
+		ih.display.PrintInfo("info - Show detailed game info")
+		ih.display.PrintInfo("debug - Show debug information")
+		if gameMode == game.ModeSimple {
+			ih.display.PrintInfo("end - End your turn")
+		}
+		ih.display.PrintInfo("surrender - Give up")
+
+		action := ih.GetStringInput("Enter your command: ", 1, 20)
+		action = strings.ToLower(strings.TrimSpace(action))
+
+		validActions := []string{"play", "attack", "info", "debug", "surrender"}
+		if gameMode == game.ModeSimple {
+			validActions = append(validActions, "end")
+		}
+
+		for _, valid := range validActions {
+			if action == valid {
+				return action
+			}
+		}
+
+		ih.display.PrintWarning("Invalid action. Please try again.")
+	}
+}

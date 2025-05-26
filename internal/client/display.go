@@ -83,10 +83,13 @@ func (d *Display) PrintGameMode(mode string) {
 }
 
 // PrintGameStart displays game start countdown
-func (d *Display) PrintGameStart(countdown int) {
+func (d *Display) PrintGameStart(countdown int, gameMode string) {
 	timestamp := time.Now().Format("15:04:05")
-	d.gameColor.Printf("[%s] [GAME START] %d minutes countdown initiated.\n",
-		timestamp, countdown)
+	if gameMode == "enhanced" {
+		d.gameColor.Printf("[%s] [GAME START] %d minutes countdown initiated.\n", timestamp, countdown)
+	} else {
+		d.gameColor.Printf("[GAME START] Battle begins!\n")
+	}
 }
 
 // PrintCardPlayed displays when a troop is summoned
@@ -241,4 +244,28 @@ func (d *Display) Clear() {
 // PrintSeparator prints a visual separator
 func (d *Display) PrintSeparator() {
 	d.infoColor.Println("═══════════════════════════════════════════════════════════════")
+}
+
+func (d *Display) PrintTowerDestroyed(destroyerName, towerName, ownerName string, isMyDestruction bool) {
+	timestamp := time.Now().Format("15:04:05")
+
+	if isMyDestruction {
+		d.winColor.Printf("[%s] [VICTORY!] %s destroyed %s's %s! 🎯\n",
+			timestamp, destroyerName, ownerName, towerName)
+	} else {
+		d.loseColor.Printf("[%s] [TOWER LOST] %s destroyed your %s! 💥\n",
+			timestamp, destroyerName, towerName)
+	}
+}
+
+func (d *Display) PrintTroopDestroyed(destroyerName, troopName, ownerName string, isMyDestruction bool) {
+	timestamp := time.Now().Format("15:04:05")
+
+	if isMyDestruction {
+		d.playerColor.Printf("[%s] [ELIMINATED] %s destroyed %s's %s! ⚔️\n",
+			timestamp, destroyerName, ownerName, troopName)
+	} else {
+		d.warningColor.Printf("[%s] [TROOP LOST] %s destroyed your %s! 💀\n",
+			timestamp, destroyerName, troopName)
+	}
 }

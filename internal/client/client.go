@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-
 	"time"
 
 	"tcr-game/internal/game"
@@ -16,21 +15,25 @@ import (
 
 // Client represents the game client
 type Client struct {
-	conn            net.Conn
-	display         *Display
-	input           *InputHandler
-	player          *game.PlayerData
-	gameState       *game.GameState
-	myTroops        []game.Troop
-	myTowers        []game.Tower
-	isConnected     bool
-	isInGame        bool
-	waitingForMatch bool
-	logger          *logger.Logger
-	writer          *bufio.Writer
-	reader          *bufio.Scanner
-	serverAddr      string
-	clientID        string
+	conn                 net.Conn
+	display              *Display
+	input                *InputHandler
+	player               *game.PlayerData
+	gameState            *game.GameState
+	myTroops             []game.Troop
+	myTowers             []game.Tower
+	isConnected          bool
+	isInGame             bool
+	waitingForMatch      bool
+	logger               *logger.Logger
+	writer               *bufio.Writer
+	reader               *bufio.Scanner
+	serverAddr           string
+	clientID             string
+	allDeployedTroops    []string       // All troops deployed since game start
+	troopAttacksThisTurn map[string]int // Track attacks per troop per turn
+	deployedThisTurn     []string       // Only troops deployed THIS turn (for limit)
+	lastWaitingMessage   string
 }
 
 // NewClient creates a new client instance
@@ -156,7 +159,7 @@ func (c *Client) handleRegister() error {
 
 // waitForAuth waits for authentication response
 func (c *Client) waitForAuth() error {
-	timeout := time.NewTimer(10 * time.Second)
+	timeout := time.NewTimer(30 * time.Second)
 	defer timeout.Stop()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -177,6 +180,17 @@ func (c *Client) waitForAuth() error {
 // runMainLoop handles the main game menu
 func (c *Client) runMainLoop() error {
 	for {
+		if !c.isInGame && c.gameState != nil {
+			// Clean up any remaining game state
+			c.gameState = nil
+			c.myTroops = nil
+			c.myTowers = nil
+			c.allDeployedTroops = []string{}
+			c.deployedThisTurn = []string{}
+			c.troopAttacksThisTurn = make(map[string]int)
+			c.lastWaitingMessage = ""
+		}
+
 		// Check if we're in game first
 		if c.isInGame {
 			// Handle in-game actions
@@ -243,37 +257,114 @@ func (c *Client) handleGameplay() error {
 		return fmt.Errorf("no active game state")
 	}
 
-	c.display.PrintSeparator()
-	c.display.PrintInfo("🔥 BATTLE IN PROGRESS 🔥")
-
-	// Show current game status
+	// Show current game status once
 	c.showGameStatus()
 
-	// Get player action (pass game mode)
-	action := c.input.GetGameAction(c.gameState.GameMode)
+	// Continuous loop for game actions
+	for c.isInGame {
+		if c.gameState == nil {
+			// Game đã bị reset do disconnect
+			return nil
+		}
 
-	switch action {
-	case "play":
-		return c.handlePlayCard()
-	case "attack":
-		return c.handleAttack()
-	case "info":
-		c.showDetailedGameInfo()
-		return nil
-	case "end":
-		return c.handleEndTurn()
-	case "surrender":
-		return c.handleSurrender()
-	default:
-		c.display.PrintWarning("Invalid action")
-		return nil
+		if c.gameState.GameMode == game.ModeSimple {
+			if c.gameState.CurrentTurn != c.clientID {
+				// Not our turn, show status and wait
+				opponentName := c.getPlayerName(c.gameState.CurrentTurn)
+				waitingMsg := fmt.Sprintf("⏳ Waiting for %s's turn...", opponentName)
+
+				if c.lastWaitingMessage != waitingMsg {
+					c.display.PrintInfo(waitingMsg)
+					c.lastWaitingMessage = waitingMsg
+				}
+
+				time.Sleep(1000 * time.Millisecond)
+				continue
+			} else {
+				c.lastWaitingMessage = ""
+			}
+		}
+
+		if !c.isInGame || c.gameState == nil {
+			return nil
+		}
+
+		// Get player action with debug option
+		action := c.input.GetGameActionWithDebug(c.gameState.GameMode)
+
+		var err error
+		switch action {
+		case "play":
+			err = c.handlePlayCard()
+		case "attack":
+			err = c.handleAttack()
+		case "info":
+			c.showDetailedGameInfo()
+			continue
+		case "debug":
+			c.debugGameState()
+			continue
+		case "end":
+			err = c.handleEndTurn()
+			// ✅ NEW: Don't continue immediately after end turn, let server respond
+			if err == nil {
+				c.display.PrintInfo("Turn ended. Waiting for server response...")
+				time.Sleep(500 * time.Millisecond)
+			}
+		case "surrender":
+			err = c.handleSurrender()
+			if err == nil {
+				return nil
+			}
+		default:
+			c.display.PrintWarning("Invalid action")
+			continue
+		}
+
+		if err != nil {
+			c.display.PrintError(fmt.Sprintf("Action failed: %v", err))
+		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
+
+	return nil
 }
 
 // handleAttack handles attacking phase
 func (c *Client) handleAttack() error {
-	if len(c.myTroops) == 0 {
-		c.display.PrintWarning("No troops available")
+	// Sync troops first
+	c.syncLocalTroopsFromGameState()
+
+	// ✅ FILTER: Show all deployed troops that are still alive
+	var availableTroops []game.Troop
+
+	if c.gameState.GameMode == game.ModeSimple {
+		// Show all deployed troops that are still alive and haven't attacked this turn
+		for _, troop := range c.myTroops {
+			for _, deployedName := range c.allDeployedTroops {
+				if string(troop.Name) == deployedName && troop.HP > 0 {
+					availableTroops = append(availableTroops, troop)
+					break
+				}
+			}
+		}
+
+		if len(availableTroops) == 0 {
+			c.display.PrintWarning("No available troops for attack. All deployed troops are destroyed.")
+			return nil
+		}
+	} else {
+		// Enhanced mode: show all living troops
+		for _, troop := range c.myTroops {
+			if troop.HP > 0 {
+				availableTroops = append(availableTroops, troop)
+			}
+		}
+	}
+
+	if len(availableTroops) == 0 {
+		c.display.PrintWarning("No troops available for attack")
 		return nil
 	}
 
@@ -286,14 +377,27 @@ func (c *Client) handleAttack() error {
 	}
 
 	// Let user choose attacker and target
-	attackerIndex, targetType, targetIndex, err := c.input.GetAttackChoice(c.myTroops, enemyTowers, c.gameState.GameMode)
+	attackerIndex, targetType, targetIndex, err := c.input.GetAttackChoice(availableTroops, enemyTowers, c.gameState.GameMode)
 	if err != nil {
 		c.display.PrintWarning(err.Error())
 		return nil
 	}
 
-	selectedTroop := c.myTroops[attackerIndex]
+	selectedTroop := availableTroops[attackerIndex]
 	targetTower := enemyTowers[targetIndex]
+
+	// ✅ VALIDATION: Check troop is still alive and can attack
+	if selectedTroop.HP <= 0 {
+		c.display.PrintError(fmt.Sprintf("%s is destroyed (HP: %d) and cannot attack", selectedTroop.Name, selectedTroop.HP))
+		return nil
+	}
+
+	// ✅ TRACK: Mark this troop as having attacked this turn
+	// if c.gameState.GameMode == game.ModeSimple {
+	// 	troopName := string(selectedTroop.Name)
+	// 	c.troopAttacksThisTurn[troopName]++
+	// 	c.logger.Debug("Marked %s as attacked: %d/1", troopName, c.troopAttacksThisTurn[troopName])
+	// }
 
 	// Send attack message
 	msg := network.CreateAttackMessage(c.clientID, c.gameState.ID, selectedTroop.Name, targetType, string(targetTower.Name))
@@ -307,6 +411,14 @@ func (c *Client) handlePlayCard() error {
 		return nil
 	}
 
+	// ✅ CHECK: Deployment limit for Simple mode (CLIENT-SIDE)
+	if c.gameState.GameMode == game.ModeSimple {
+		if len(c.deployedThisTurn) >= 1 {
+			c.display.PrintError("Cannot deploy more than one troop per turn in simple mode")
+			return nil
+		}
+	}
+
 	// Get current mana (only for Enhanced mode)
 	var currentMana int = 999 // Default: unlimited for Simple mode
 	if c.gameState.GameMode == game.ModeEnhanced {
@@ -317,7 +429,7 @@ func (c *Client) handlePlayCard() error {
 		}
 	}
 
-	// Let user choose troop (pass game mode)
+	// Let user choose troop
 	troopIndex, err := c.input.GetTroopChoice(c.myTroops, currentMana, c.gameState.GameMode)
 	if err != nil {
 		c.display.PrintWarning(err.Error())
@@ -325,6 +437,31 @@ func (c *Client) handlePlayCard() error {
 	}
 
 	selectedTroop := c.myTroops[troopIndex]
+
+	// ✅ TRACK: Add to both lists
+	troopName := string(selectedTroop.Name)
+	if c.gameState.GameMode == game.ModeSimple {
+		// Track deployment this turn (for limit)
+		c.deployedThisTurn = append(c.deployedThisTurn, troopName)
+
+		// Track all deployed troops (persistent across turns)
+		isAlreadyDeployed := false
+		for _, deployed := range c.allDeployedTroops {
+			if deployed == troopName {
+				isAlreadyDeployed = true
+				break
+			}
+		}
+		if !isAlreadyDeployed {
+			c.allDeployedTroops = append(c.allDeployedTroops, troopName)
+		}
+
+		// Initialize attack counter for this troop
+		if c.troopAttacksThisTurn == nil {
+			c.troopAttacksThisTurn = make(map[string]int)
+		}
+		c.troopAttacksThisTurn[troopName] = 0
+	}
 
 	// Send summon message
 	msg := network.CreateSummonMessage(c.clientID, c.gameState.ID, selectedTroop.Name)
@@ -338,8 +475,46 @@ func (c *Client) handleEndTurn() error {
 		return nil
 	}
 
+	// ✅ STEP 1: Force sync game state by requesting fresh data
+	c.display.PrintInfo("Checking turn status...")
+
+	// Debug current state
+	c.display.PrintInfo(fmt.Sprintf("CLIENT: Current turn = %s", c.gameState.CurrentTurn))
+	c.display.PrintInfo(fmt.Sprintf("CLIENT: My ID = %s", c.clientID))
+	c.display.PrintInfo(fmt.Sprintf("CLIENT: Is my turn = %t", c.gameState.CurrentTurn == c.clientID))
+
+	// ✅ STEP 2: Check if it's really our turn
+	if c.gameState.CurrentTurn != c.clientID {
+		// Get opponent name for better error message
+		opponentName := c.getPlayerName(c.gameState.CurrentTurn)
+		c.display.PrintError(fmt.Sprintf("❌ Cannot end turn: It's %s's turn", opponentName))
+		c.display.PrintInfo("🔄 Possible causes:")
+		c.display.PrintInfo("  - Auto-attack already ended your turn")
+		c.display.PrintInfo("  - Game state is not synced")
+		c.display.PrintInfo("  - Server is processing previous action")
+		c.display.PrintInfo("💡 Try waiting a moment or use 'debug' for details")
+		return nil
+	}
+
+	// ✅ STEP 3: Send end turn with enhanced logging
+	c.display.PrintInfo("✅ Confirmed: It's your turn. Ending turn...")
+	c.logger.Debug("Sending end turn - Game ID: %s, Player ID: %s", c.gameState.ID, c.clientID)
+
 	msg := network.NewMessage(network.MsgEndTurn, c.clientID, c.gameState.ID)
-	return c.sendMessage(msg)
+
+	err := c.sendMessage(msg)
+	if err != nil {
+		c.display.PrintError(fmt.Sprintf("Failed to send end turn message: %v", err))
+		return err
+	}
+
+	c.display.PrintInfo("📤 End turn message sent. Waiting for server response...")
+	c.logger.Debug("End turn message sent successfully")
+
+	// ✅ STEP 4: Wait a bit for server response
+	time.Sleep(1000 * time.Millisecond)
+
+	return nil
 }
 
 // handleSurrender handles surrender
@@ -398,6 +573,8 @@ func (c *Client) processServerMessage(data []byte) error {
 		return c.handleTurnChange(msg)
 	case network.MsgError:
 		return c.handleError(msg)
+	case "PLAYER_DISCONNECT":
+		return c.handlePlayerDisconnectMessage(msg)
 	default:
 		c.logger.Debug("Unhandled message type: %s", msg.Type)
 	}
@@ -471,11 +648,16 @@ func (c *Client) handleGameStart(msg *network.Message) error {
 		return fmt.Errorf("failed to parse towers: %w", err)
 	}
 
-	// Important: Set game state flags
+	// ✅ INITIALIZE: All tracking variables
+	c.allDeployedTroops = []string{}
+	c.deployedThisTurn = []string{}
+	c.troopAttacksThisTurn = make(map[string]int)
+
+	// Set game state flags
 	c.isInGame = true
 	c.waitingForMatch = false
 
-	c.display.PrintGameStart(3)
+	c.display.PrintGameStart(3, c.gameState.GameMode)
 	c.display.PrintGameMode(c.gameState.GameMode)
 	c.display.PrintInfo("🔥 GAME STARTED! 🔥")
 
@@ -503,12 +685,48 @@ func (c *Client) handleGameEvent(msg *network.Message) error {
 		return fmt.Errorf("failed to parse game state: %w", err)
 	}
 
+	// ✅ CRITICAL: Update local troop data from game state
+	c.syncLocalTroopsFromGameState()
+
 	// Display event based on type
 	c.displayGameEvent(event)
 	return nil
 }
 
-// displayGameEvent shows game events with appropriate colors
+func (c *Client) syncLocalTroopsFromGameState() {
+	if c.gameState == nil {
+		return
+	}
+
+	var serverTroops []game.Troop
+	if c.gameState.Player1.ID == c.clientID {
+		serverTroops = c.gameState.Player1.Troops
+	} else {
+		serverTroops = c.gameState.Player2.Troops
+	}
+
+	// Update local troops with server data
+	for i := range c.myTroops {
+		for j := range serverTroops {
+			if c.myTroops[i].Name == serverTroops[j].Name {
+				// Sync HP and other stats
+				oldHP := c.myTroops[i].HP
+				c.myTroops[i].HP = serverTroops[j].HP
+				c.myTroops[i].ATK = serverTroops[j].ATK
+				c.myTroops[i].DEF = serverTroops[j].DEF
+
+				// Log HP changes for debugging
+				if oldHP != c.myTroops[i].HP {
+					c.logger.Debug("Troop %s HP changed: %d -> %d",
+						c.myTroops[i].Name, oldHP, c.myTroops[i].HP)
+				}
+				break
+			}
+		}
+	}
+}
+
+// ✅ UPDATE CLIENT.GO - Enhanced displayGameEvent function
 func (c *Client) displayGameEvent(event game.CombatAction) {
 	isMyAction := event.PlayerID == c.clientID
 
@@ -521,12 +739,47 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 	case game.ActionAttack:
 		attacker := string(event.TroopName)
 		target := event.TargetName
+
+		// ✅ CHECK: If this is a counter-attack
+		isCounter := false
+		if data, ok := event.Data["is_counter"]; ok {
+			isCounter, _ = data.(bool)
+		}
+
+		if isCounter {
+			c.display.PrintInfo(fmt.Sprintf("🔄 Counter-attack: %s strikes back at %s!", attacker, target))
+		}
+
 		c.display.PrintAttack(attacker, target, event.Damage, event.IsCrit)
 
 	case game.ActionHeal:
 		healer := string(event.TroopName)
 		target := event.TargetName
 		c.display.PrintHeal(healer, target, event.HealAmount)
+
+	case "TOWER_DESTROYED": // ✅ NEW: Handle tower destruction
+		destroyer := event.Data["destroyer"].(string)
+		owner := event.Data["owner"].(string)
+		towerName := event.TargetName
+
+		// Check if I'm the destroyer
+		isMyDestruction := event.PlayerID == c.clientID
+		c.display.PrintTowerDestroyed(destroyer, towerName, owner, isMyDestruction)
+
+	case "TROOP_DESTROYED": // ✅ NEW: Handle troop destruction
+		destroyer := event.Data["destroyer"].(string)
+		owner := event.Data["owner"].(string)
+		troopName := event.TargetName
+
+		// Check if I'm the destroyer
+		isMyDestruction := event.PlayerID == c.clientID
+		c.display.PrintTroopDestroyed(destroyer, troopName, owner, isMyDestruction)
+
+	case "TURN_END":
+		// Don't display turn end events here - handled by handleTurnChange
+
+	case "GAME_END":
+		// Don't display game end events here - handled by handleGameEnd
 	}
 }
 
@@ -561,6 +814,8 @@ func (c *Client) handleGameEnd(msg *network.Message) error {
 func (c *Client) handleTurnChange(msg *network.Message) error {
 	currentTurn, _ := msg.Data["current_turn"].(string)
 
+	c.logger.Debug("Received turn change: %s -> %s", c.gameState.CurrentTurn, currentTurn)
+
 	// Update game state if provided
 	if gameStateData, exists := msg.Data["game_state"]; exists {
 		gameStateJson, _ := json.Marshal(gameStateData)
@@ -569,12 +824,34 @@ func (c *Client) handleTurnChange(msg *network.Message) error {
 		}
 	}
 
-	if currentTurn == c.clientID {
-		c.display.PrintInfo("🔥 It's your turn! 🔥")
-	} else {
-		c.display.PrintInfo("⏳ Waiting for opponent's turn...")
+	// ✅ IMPORTANT: Update current turn
+	oldTurn := c.gameState.CurrentTurn
+	c.gameState.CurrentTurn = currentTurn
+
+	// ✅ RESET: Only reset turn-specific counters, keep deployed troops
+	if c.gameState.GameMode == game.ModeSimple {
+		c.deployedThisTurn = []string{} // Reset deployment limit
+		// c.troopAttacksThisTurn = make(map[string]int) // Reset attack counters
+		// DON'T reset c.allDeployedTroops - these persist across turns!
 	}
 
+	// ✅ ENHANCED: Better turn display with transition info
+	c.display.PrintSeparator()
+	c.display.PrintInfo(fmt.Sprintf("🔄 TURN CHANGE: %s → %s",
+		c.getPlayerName(oldTurn), c.getPlayerName(currentTurn)))
+
+	if currentTurn == c.clientID {
+		c.display.PrintInfo("🔥 It's YOUR TURN! 🔥")
+		c.display.PrintInfo("Available actions: play, attack, info, debug, end, surrender")
+		c.display.PrintInfo("💡 Remember: 1 troop deployment per turn, each deployed troop can attack once")
+	} else {
+		opponentName := c.getPlayerName(currentTurn)
+		c.display.PrintInfo(fmt.Sprintf("⏳ Waiting for %s's turn...", opponentName))
+		c.display.PrintInfo("You can use 'info' or 'debug' to check game status")
+	}
+	c.display.PrintSeparator()
+
+	c.logger.Debug("Turn change processed: Current turn is now %s", c.gameState.CurrentTurn)
 	return nil
 }
 
@@ -632,8 +909,11 @@ func (c *Client) showGameStatus() {
 	// Show basic game info
 	c.display.PrintInfo(fmt.Sprintf("Game Mode: %s", c.gameState.GameMode))
 
-	// Only show mana in Enhanced mode
+	// Only show time left in Enhanced mode
 	if c.gameState.GameMode == game.ModeEnhanced {
+		c.display.PrintInfo(fmt.Sprintf("Time Left: %d seconds", c.gameState.TimeLeft))
+
+		// Show mana for Enhanced mode
 		var myMana int
 		if c.gameState.Player1.ID == c.clientID {
 			myMana = c.gameState.Player1.Mana
@@ -660,15 +940,75 @@ func (c *Client) showDetailedGameInfo() {
 	c.display.PrintSeparator()
 	c.display.PrintInfo("🎯 DETAILED GAME INFO 🎯")
 
-	// Show my towers
-	c.display.PrintTowerStatus(c.myTowers, "Your")
+	// Show game mode and turn
+	c.display.PrintInfo(fmt.Sprintf("Game Mode: %s", c.gameState.GameMode))
+	if c.gameState.GameMode == game.ModeSimple {
+		if c.gameState.CurrentTurn == c.clientID {
+			c.display.PrintInfo("🔥 YOUR TURN 🔥")
+		} else {
+			c.display.PrintInfo("⏳ Opponent's Turn")
+		}
 
-	// Show my troops
+		// ✅ NEW: Show deployment status in Simple mode
+		c.display.PrintInfo(fmt.Sprintf("Troops Deployed This Turn: %d/1", len(c.deployedThisTurn)))
+		if len(c.deployedThisTurn) > 0 {
+			c.display.PrintInfo(fmt.Sprintf("Deployed: %v", c.deployedThisTurn))
+		}
+	}
+
+	// Show my towers with detailed HP
+	c.display.PrintInfo("\n=== Your Towers ===")
+	var myTowers []game.Tower
+	if c.gameState.Player1.ID == c.clientID {
+		myTowers = c.gameState.Player1.Towers
+	} else {
+		myTowers = c.gameState.Player2.Towers
+	}
+
+	for i, tower := range myTowers {
+		c.display.PrintInfo(fmt.Sprintf("%d. %s: %d/%d HP (%.1f%%)",
+			i+1, tower.Name, tower.HP, tower.MaxHP,
+			float64(tower.HP)/float64(tower.MaxHP)*100))
+	}
+
+	// Show opponent towers
+	c.display.PrintInfo("\n=== Opponent Towers ===")
+	var opponentTowers []game.Tower
+	if c.gameState.Player1.ID == c.clientID {
+		opponentTowers = c.gameState.Player2.Towers
+	} else {
+		opponentTowers = c.gameState.Player1.Towers
+	}
+
+	for i, tower := range opponentTowers {
+		c.display.PrintInfo(fmt.Sprintf("%d. %s: %d/%d HP (%.1f%%)",
+			i+1, tower.Name, tower.HP, tower.MaxHP,
+			float64(tower.HP)/float64(tower.MaxHP)*100))
+	}
+
+	// ✅ UPDATED: Show troops with deployment status
 	c.display.PrintInfo("\n=== Your Troops ===")
 	for i, troop := range c.myTroops {
-		c.display.PrintInfo(fmt.Sprintf("%d. %s (HP: %d, ATK: %d, DEF: %d, MANA: %d)",
-			i+1, troop.Name, troop.HP, troop.ATK, troop.DEF, troop.MANA))
+		isDeployed := false
+		for _, deployedName := range c.allDeployedTroops {
+			if string(troop.Name) == deployedName {
+				isDeployed = true
+				break
+			}
+		}
+
+		status := ""
+		if c.gameState.GameMode == game.ModeSimple && isDeployed {
+			status = " [DEPLOYED]"
+		}
+
+		c.display.PrintInfo(fmt.Sprintf("%d. %s%s (HP: %d, ATK: %d, DEF: %d, MANA: %d)",
+			i+1, troop.Name, status, troop.HP, troop.ATK, troop.DEF, troop.MANA))
 	}
+
+	// Show towers killed count
+	c.display.PrintInfo(fmt.Sprintf("\nTowers Destroyed - You: %d | Opponent: %d",
+		c.gameState.TowersKilled.Player2, c.gameState.TowersKilled.Player1))
 
 	c.input.WaitForEnter("")
 }
@@ -690,6 +1030,109 @@ func (c *Client) getPlayerName(playerID string) string {
 	return "Unknown"
 }
 
+// Enhanced debug function to check deployment status
+func (c *Client) debugGameState() {
+	if c.gameState == nil {
+		c.display.PrintError("No game state available")
+		return
+	}
+
+	c.display.PrintInfo("=== DEBUG: TURN & GAME STATE ANALYSIS ===")
+
+	// ✅ TURN STATUS ANALYSIS
+	c.display.PrintInfo("📋 TURN STATUS:")
+	c.display.PrintInfo(fmt.Sprintf("  Game Mode: %s", c.gameState.GameMode))
+	c.display.PrintInfo(fmt.Sprintf("  Current Turn (Server): %s", c.gameState.CurrentTurn))
+	c.display.PrintInfo(fmt.Sprintf("  My Client ID: %s", c.clientID))
+	c.display.PrintInfo(fmt.Sprintf("  Is My Turn: %t", c.gameState.CurrentTurn == c.clientID))
+
+	if c.gameState.CurrentTurn == c.clientID {
+		c.display.PrintInfo("  ✅ CAN END TURN")
+	} else {
+		c.display.PrintInfo("  ❌ CANNOT END TURN")
+		c.display.PrintInfo(fmt.Sprintf("  Current turn belongs to: %s", c.getPlayerName(c.gameState.CurrentTurn)))
+	}
+
+	// ✅ DEPLOYMENT STATUS
+	c.display.PrintInfo("\n📦 DEPLOYMENT STATUS:")
+	c.display.PrintInfo(fmt.Sprintf("  All Deployed Troops: %v", c.allDeployedTroops))
+	c.display.PrintInfo(fmt.Sprintf("  Deployed This Turn: %v", c.deployedThisTurn))
+	c.display.PrintInfo(fmt.Sprintf("  Can Deploy More: %t", len(c.deployedThisTurn) < 1))
+
+	// ✅ ATTACK STATUS
+	c.display.PrintInfo("\n⚔️ ATTACK STATUS:")
+	c.display.PrintInfo(fmt.Sprintf("  Attack Counts This Turn: %v", c.troopAttacksThisTurn))
+
+	availableAttackers := 0
+	for _, deployedName := range c.allDeployedTroops {
+		for _, troop := range c.myTroops {
+			if string(troop.Name) == deployedName && troop.HP > 0 && c.troopAttacksThisTurn[deployedName] < 1 {
+				availableAttackers++
+				break
+			}
+		}
+	}
+	c.display.PrintInfo(fmt.Sprintf("  Available Attackers: %d", availableAttackers))
+
+	// ✅ TROOPS DETAILED STATUS
+	c.display.PrintInfo("\n👥 TROOPS STATUS:")
+	for i, troop := range c.myTroops {
+		troopName := string(troop.Name)
+		isEverDeployed := false
+		for _, deployed := range c.allDeployedTroops {
+			if deployed == troopName {
+				isEverDeployed = true
+				break
+			}
+		}
+
+		isDeployedThisTurn := false
+		for _, deployed := range c.deployedThisTurn {
+			if deployed == troopName {
+				isDeployedThisTurn = true
+				break
+			}
+		}
+
+		attackCount := c.troopAttacksThisTurn[troopName]
+		status := "Available"
+		if isEverDeployed {
+			if troop.HP <= 0 {
+				status = "💀 DESTROYED"
+			} else if attackCount >= 1 {
+				status = "⚔️ EXHAUSTED"
+			} else {
+				status = "✅ READY"
+			}
+		}
+		if isDeployedThisTurn {
+			status += " [NEW]"
+		}
+
+		c.display.PrintInfo(fmt.Sprintf("  [%d] %s: %s (HP: %d, ATK: %d, Attacks: %d/1)",
+			i+1, troop.Name, status, troop.HP, troop.ATK, attackCount))
+	}
+
+	// ✅ ACTION RECOMMENDATIONS
+	c.display.PrintInfo("\n💡 RECOMMENDATIONS:")
+	if c.gameState.CurrentTurn != c.clientID {
+		c.display.PrintInfo("  - Wait for your turn")
+		c.display.PrintInfo("  - Use 'info' to monitor game status")
+	} else {
+		if len(c.deployedThisTurn) < 1 {
+			c.display.PrintInfo("  - You can deploy 1 more troop this turn")
+		}
+		if availableAttackers > 0 {
+			c.display.PrintInfo(fmt.Sprintf("  - You have %d troops that can attack", availableAttackers))
+		}
+		if len(c.deployedThisTurn) >= 1 && availableAttackers == 0 {
+			c.display.PrintInfo("  - You can end your turn")
+		}
+	}
+
+	c.input.WaitForEnter("Press Enter to continue...")
+}
+
 // Close closes the client connection
 func (c *Client) Close() error {
 	c.isConnected = false
@@ -698,6 +1141,47 @@ func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()
 	}
+
+	return nil
+}
+
+func (c *Client) handlePlayerDisconnect(opponentName string) {
+	c.display.PrintSeparator()
+	c.display.PrintInfo(fmt.Sprintf("🚪 %s has left the game!", opponentName))
+	c.display.PrintInfo("🎉 You WIN by default! 🎉")
+	c.display.PrintSeparator()
+	c.isInGame = false
+	c.waitingForMatch = false
+	c.gameState = nil
+	c.myTroops = nil
+	c.myTowers = nil
+	c.allDeployedTroops = []string{}
+	c.deployedThisTurn = []string{}
+	c.troopAttacksThisTurn = make(map[string]int)
+	c.lastWaitingMessage = ""
+
+	c.input.WaitForEnter("Press Enter to return to menu...")
+}
+
+func (c *Client) handlePlayerDisconnectMessage(msg *network.Message) error {
+	_, ok := msg.Data["disconnect_info"].(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("invalid disconnect info format")
+	}
+
+	// Lấy tên opponent từ game state
+	opponentName := "Opponent"
+	if c.gameState != nil {
+		if c.gameState.Player1.ID != c.clientID {
+			opponentName = c.gameState.Player1.Username
+		} else {
+			opponentName = c.gameState.Player2.Username
+		}
+	}
+
+	go func() {
+		c.handlePlayerDisconnect(opponentName)
+	}()
 
 	return nil
 }

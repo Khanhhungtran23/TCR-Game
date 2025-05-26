@@ -467,6 +467,12 @@ func (s *Server) removeClient(clientID string) {
 	defer s.mu.Unlock()
 
 	if client, exists := s.clients[clientID]; exists {
+		// ✅ XỬ LÝ DISCONNECT TRONG GAME
+		if client.GameID != "" {
+			// Thông báo opponent win
+			s.handlePlayerDisconnect(client.GameID, clientID)
+		}
+
 		client.IsActive = false
 		delete(s.clients, clientID)
 	}
@@ -476,7 +482,7 @@ func (s *Server) cleanupInactiveClients() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	timeout := 5 * time.Minute
+	timeout := 30 * time.Minute
 	now := time.Now()
 
 	for clientID, client := range s.clients {
@@ -689,11 +695,41 @@ func (s *Server) createMatch(client1, client2 *Client, gameMode string) {
 
 	// Start game
 	gameEngine.StartGame()
+	go s.handleGameEvents(gameEngine)
 
 	// 🔥 ADD THIS: Send game start data
 	s.sendGameStart(client1, client2, gameEngine)
 
 	s.logger.Info("Match created: %s vs %s in %s mode", client1.Username, client2.Username, gameMode)
+}
+
+// handleGameEvents listens to game engine events and broadcasts them
+func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
+	eventChan := gameEngine.GetEventChannel()
+
+	for s.isRunning && gameEngine.IsRunning() {
+		select {
+		case event := <-eventChan:
+			// Broadcast event to all players in this game
+			gameState := gameEngine.GetGameState()
+			s.broadcastGameEvent(gameState.ID, event, *gameState)
+
+			// Handle special events
+			if event.Type == "TURN_END" {
+				// Send turn change message
+				response := network.NewMessage(network.MsgTurnChange, "", gameState.ID)
+				response.SetData("current_turn", gameState.CurrentTurn)
+				response.SetData("game_state", gameState)
+				s.broadcastToGame(gameState.ID, response)
+			} else if event.Type == "GAME_END" {
+				// Handle game end
+				s.endGame(gameState.ID, "king_tower_destroyed")
+			}
+		case <-time.After(100 * time.Millisecond):
+			// Small timeout to prevent blocking
+			continue
+		}
+	}
 }
 
 // 🔥 ADD THESE FUNCTIONS:
@@ -744,4 +780,28 @@ func (s *Server) sendGameStart(client1, client2 *Client, gameEngine *game.GameEn
 		"countdown_seconds": 3,
 	})
 	s.sendMessage(client2, msg2)
+}
+
+func (s *Server) handlePlayerDisconnect(gameID, disconnectedClientID string) {
+	// Tìm opponent
+	for _, client := range s.clients {
+		if client.GameID == gameID && client.ID != disconnectedClientID && client.IsActive {
+			// Gửi thông báo disconnect
+			msg := network.NewMessage("PLAYER_DISCONNECT", client.ID, gameID)
+			msg.SetData("disconnect_info", map[string]interface{}{
+				"disconnected_player": disconnectedClientID,
+				"winner":              client.ID,
+				"reason":              "opponent_disconnect",
+			})
+			s.sendMessage(client, msg)
+
+			// Clear game ID
+			client.GameID = ""
+			break
+		}
+	}
+
+	// Remove game
+	delete(s.games, gameID)
+	s.logger.Info("Game %s ended due to player disconnect", gameID)
 }
