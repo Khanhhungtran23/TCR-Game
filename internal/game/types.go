@@ -49,12 +49,11 @@ type Tower struct {
 }
 
 type Player struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Password string `json:"password,omitempty"` // Omit in network messages
-	Level    int    `json:"level"`
-	EXP      int    `json:"exp"`
-	// Trophies int     `json:"trophies"`
+	ID                     string  `json:"id"`
+	Username               string  `json:"username"`
+	Password               string  `json:"password,omitempty"` // Omit in network messages
+	Level                  int     `json:"level"`
+	EXP                    int     `json:"exp"`
 	Mana                   int     `json:"mana"`
 	MaxMana                int     `json:"max_mana"`
 	Troops                 []Troop `json:"troops"` // 3 random troops for this match
@@ -119,11 +118,10 @@ type TowerSpec struct {
 
 // PlayerData represents persistent player data
 type PlayerData struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-	Level    int    `json:"level"`
-	EXP      int    `json:"exp"`
-	// Trophies    int               `json:"trophies"`
+	Username    string            `json:"username"`
+	Password    string            `json:"password"`
+	Level       int               `json:"level"`
+	EXP         int               `json:"exp"`
 	TroopLevels map[TroopType]int `json:"troop_levels"`
 	TowerLevels map[TowerType]int `json:"tower_levels"`
 	GamesPlayed int               `json:"games_played"`
@@ -139,16 +137,23 @@ const (
 	MaxMana             = 10
 	ManaRegenPerSecond  = 1
 
-	// EXP rewards
-	WinEXP  = 30
-	DrawEXP = 10
+	// ✅ UPDATED: EXP rewards
+	WinEXP  = 50 // EXP for winning
+	LoseEXP = 10 // EXP for losing
+	DrawEXP = 25 // EXP for draw
 
-	// Scaling factors
+	// ✅ NEW: Bonus EXP for actions
+	TowerDestroyEXP = 100 // Extra EXP for destroying towers
+	TroopKillEXP    = 20  // Extra EXP for killing troops
+	DamageEXPRatio  = 50  // 1 EXP per 50 damage dealt
+
+	// ✅ UPDATED: Scaling factors for better balance
 	StatScalePerLevel = 0.10 // 10% increase per level
-	EXPScalePerLevel  = 0.10 // 10% increase in required EXP per level
+	EXPScalePerLevel  = 0.15 // 15% increase in required EXP per level
+	BaseEXPRequired   = 100  // Base EXP needed for level 2
 
 	// Targeting rules for Simple TCR
-	// Must destroy Guard Towers before attacking King Tower
+	// Must destroy at least one Guard Tower before attacking King Tower
 
 	// Number of troops and towers
 	TroopsPerPlayer = 3

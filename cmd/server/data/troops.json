@@ -1,26 +1,26 @@
 {
     "troops": {
       "Pawn": {
-        "hp": 50,
-        "atk": 150,
-        "def": 100,
+        "hp": 150,
+        "atk": 180,
+        "def": 80,
         "crit": 0.10,
         "mana": 3,
-        "exp": 5,
-        "special": ""
-      },
-      "Bishop": {
-        "hp": 100,
-        "atk": 200,
-        "def": 150,
-        "crit": 0.10,
-        "mana": 4,
         "exp": 10,
         "special": ""
       },
-      "Rook": {
+      "Bishop": {
         "hp": 250,
-        "atk": 200,
+        "atk": 220,
+        "def": 100,
+        "crit": 0.10,
+        "mana": 4,
+        "exp": 15,
+        "special": ""
+      },
+      "Rook": {
+        "hp": 300,
+        "atk": 280,
         "def": 200,
         "crit": 0.10,
         "mana": 5,
@@ -28,8 +28,8 @@
         "special": ""
       },
       "Knight": {
-        "hp": 200,
-        "atk": 300,
+        "hp": 350,
+        "atk": 320,
         "def": 150,
         "crit": 0.10,
         "mana": 5,

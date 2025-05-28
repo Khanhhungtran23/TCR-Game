@@ -353,18 +353,12 @@ func (s *Server) handleSurrender(client *Client, msg *network.Message) error {
 		return s.sendError(client, "NO_ACTIVE_GAME", "No active game found")
 	}
 
-	gameState := gameEngine.GetGameState()
-
-	// Set opponent as winner in game state
-	if gameState.Player1.ID == client.ID {
-		gameState.Winner = gameState.Player2.ID
-	} else {
-		gameState.Winner = gameState.Player1.ID
+	// Use GameEngine surrender method
+	if err := gameEngine.Surrender(client.ID); err != nil {
+		return s.sendError(client, "SURRENDER_FAILED", err.Error())
 	}
 
-	s.logger.Info("Player %s surrendered. Winner: %s", client.Username, gameState.Winner)
-
-	// End game with surrender reason
+	s.logger.Info("Player %s surrendered", client.Username)
 	return s.endGame(client.GameID, "surrender")
 }
 
@@ -539,11 +533,13 @@ func (s *Server) endGame(gameID string, reason string) error {
 	}
 
 	// Calculate rewards
-	var winnerExp, loserExp int = 30, 0
-
-	if gameState.Winner == "draw" || reason == "draw" {
-		winnerExp = 10
-		loserExp = 10
+	var winnerExp, loserExp int
+	if reason == "draw" || gameState.Winner == "draw" {
+		winnerExp = s.dataManager.CalculateGameEndEXP(false, true) // draw
+		loserExp = winnerExp
+	} else {
+		winnerExp = s.dataManager.CalculateGameEndEXP(true, false) // win
+		loserExp = s.dataManager.CalculateGameEndEXP(false, false) // lose
 	}
 
 	// Send game end notifications
@@ -681,7 +677,7 @@ func (s *Server) createMatch(client1, client2 *Client, gameMode string) {
 	gamePlayer2 := s.dataManager.CreatePlayerForGame(client2.Player, client2.ID)
 
 	// Create game engine
-	gameEngine := game.NewGameEngine(gamePlayer1, gamePlayer2, gameMode, s.dataManager.GetGameSpecs())
+	gameEngine := game.NewGameEngine(gamePlayer1, gamePlayer2, gameMode, s.dataManager.GetGameSpecs(), s.dataManager)
 
 	// Store game
 	s.mu.Lock()
@@ -725,14 +721,15 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 				// Handle game end
 				s.endGame(gameState.ID, "king_tower_destroyed")
 			}
+			if event.Type == "EXP_GAINED" {
+				// Broadcast EXP gain to client
+				s.broadcastGameEvent(gameState.ID, event, *gameState)
+			}
 		case <-time.After(100 * time.Millisecond):
-			// Small timeout to prevent blocking
 			continue
 		}
 	}
 }
-
-// 🔥 ADD THESE FUNCTIONS:
 
 // notifyMatchFound sends match found notification to both players
 func (s *Server) notifyMatchFound(client1, client2 *Client, gameID, gameMode string) {

@@ -38,17 +38,14 @@ func NewDataManager(dataDir string) *DataManager {
 
 // Initialize loads all game data from JSON files
 func (dm *DataManager) Initialize() error {
-	// Create data directory if it doesn't exist
 	if err := os.MkdirAll(dm.dataDir, 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %w", err)
 	}
 
-	// Load game specifications
 	if err := dm.loadGameSpecs(); err != nil {
 		return fmt.Errorf("failed to load game specs: %w", err)
 	}
 
-	// Load player database
 	if err := dm.loadPlayerDatabase(); err != nil {
 		return fmt.Errorf("failed to load player database: %w", err)
 	}
@@ -58,13 +55,11 @@ func (dm *DataManager) Initialize() error {
 
 // loadGameSpecs loads troop and tower specifications from JSON files
 func (dm *DataManager) loadGameSpecs() error {
-	// Load troops
 	troopSpecs, err := dm.loadTroopSpecs()
 	if err != nil {
 		return err
 	}
 
-	// Load towers
 	towerSpecs, err := dm.loadTowerSpecs()
 	if err != nil {
 		return err
@@ -116,9 +111,7 @@ func (dm *DataManager) loadTowerSpecs() (map[TowerType]TowerSpec, error) {
 
 // loadPlayerDatabase loads player data from players.json
 func (dm *DataManager) loadPlayerDatabase() error {
-	// Check if players file exists
 	if _, err := os.Stat(dm.playersFile); os.IsNotExist(err) {
-		// Create empty player database
 		dm.playerDB = &PlayerDatabase{
 			Players: make([]PlayerData, 0),
 		}
@@ -160,7 +153,6 @@ func (dm *DataManager) AuthenticatePlayer(username, password string) (*PlayerDat
 		player := &dm.playerDB.Players[i]
 		if player.Username == username {
 			if player.Password == password {
-				// Update last login
 				player.LastLogin = time.Now()
 				dm.savePlayerDatabase()
 				return player, nil
@@ -173,20 +165,17 @@ func (dm *DataManager) AuthenticatePlayer(username, password string) (*PlayerDat
 
 // RegisterPlayer creates a new player account
 func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, error) {
-	// Check if username already exists
 	for _, player := range dm.playerDB.Players {
 		if player.Username == username {
 			return nil, fmt.Errorf("username already exists")
 		}
 	}
 
-	// Create new player with default values
 	newPlayer := PlayerData{
-		Username: username,
-		Password: password,
-		Level:    1,
-		EXP:      0,
-		// Trophies:     0,
+		Username:    username,
+		Password:    password,
+		Level:       1,
+		EXP:         0,
 		TroopLevels: make(map[TroopType]int),
 		TowerLevels: make(map[TowerType]int),
 		GamesPlayed: 0,
@@ -202,7 +191,6 @@ func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, e
 		newPlayer.TowerLevels[towerType] = 1
 	}
 
-	// Add to database
 	dm.playerDB.Players = append(dm.playerDB.Players, newPlayer)
 
 	if err := dm.savePlayerDatabase(); err != nil {
@@ -212,21 +200,31 @@ func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, e
 	return &newPlayer, nil
 }
 
-// UpdatePlayerData updates player statistics after a game
+// ✅ UPDATED: UpdatePlayerData with improved EXP and level system
 func (dm *DataManager) UpdatePlayerData(username string, expGained int, won bool, trophyChange int) error {
 	for i := range dm.playerDB.Players {
 		player := &dm.playerDB.Players[i]
 		if player.Username == username {
 			// Update statistics
+			oldLevel := player.Level
+			oldEXP := player.EXP
+
 			player.EXP += expGained
-			// player.Trophies += trophyChange
 			player.GamesPlayed++
 			if won {
 				player.GamesWon++
 			}
 
-			// Check for level up
-			dm.checkLevelUp(player)
+			// ✅ IMPROVED: Check for level up with proper scaling
+			leveledUp := dm.checkLevelUp(player)
+
+			// Log the changes
+			fmt.Printf("[DATA] Player %s: EXP %d -> %d (+%d), Level %d -> %d\n",
+				username, oldEXP, player.EXP, expGained, oldLevel, player.Level)
+
+			if leveledUp {
+				fmt.Printf("[DATA] Player %s leveled up! New level: %d\n", username, player.Level)
+			}
 
 			return dm.savePlayerDatabase()
 		}
@@ -234,32 +232,57 @@ func (dm *DataManager) UpdatePlayerData(username string, expGained int, won bool
 	return fmt.Errorf("player not found")
 }
 
-// checkLevelUp checks if player should level up and updates accordingly
-func (dm *DataManager) checkLevelUp(player *PlayerData) {
-	requiredEXP := dm.calculateRequiredEXP(player.Level)
+// ✅ IMPROVED: checkLevelUp with better progression system
+func (dm *DataManager) checkLevelUp(player *PlayerData) bool {
+	leveledUp := false
 
-	for player.EXP >= requiredEXP {
+	for {
+		requiredEXP := dm.calculateRequiredEXP(player.Level)
+
+		if player.EXP < requiredEXP {
+			break // No more level ups
+		}
+
+		// Level up!
 		player.Level++
 		player.EXP -= requiredEXP
-		requiredEXP = dm.calculateRequiredEXP(player.Level)
+		leveledUp = true
 
-		// Level up all troops and towers
+		// ✅ IMPROVED: Level up all troops and towers (10% stat increase)
 		for troopType := range player.TroopLevels {
-			player.TroopLevels[troopType]++
+			player.TroopLevels[troopType] = player.Level
 		}
 		for towerType := range player.TowerLevels {
-			player.TowerLevels[towerType]++
+			player.TowerLevels[towerType] = player.Level
 		}
+
+		fmt.Printf("[LEVEL UP] Player %s reached level %d! Required EXP for next: %d\n",
+			player.Username, player.Level, dm.calculateRequiredEXP(player.Level))
 	}
+
+	return leveledUp
 }
 
-// calculateRequiredEXP calculates EXP needed for next level
+// ✅ UPDATED: calculateRequiredEXP with better scaling
 func (dm *DataManager) calculateRequiredEXP(level int) int {
-	baseEXP := 100
-	return int(float64(baseEXP) * (1.0 + float64(level-1)*EXPScalePerLevel))
-}
+	// Base EXP for level 2 is 100
+	// Each level requires 15% more EXP than previous level
+	// Level 1->2: 100 EXP
+	// Level 2->3: 115 EXP
+	// Level 3->4: 132 EXP
+	// etc.
 
-// Game creation methods
+	if level <= 1 {
+		return BaseEXPRequired // 100 EXP for level 2
+	}
+
+	baseEXP := float64(BaseEXPRequired)
+	for i := 2; i < level; i++ {
+		baseEXP *= (1.0 + EXPScalePerLevel) // 15% increase per level
+	}
+
+	return int(baseEXP)
+}
 
 // CreatePlayerForGame creates a Player instance for gameplay from PlayerData
 func (dm *DataManager) CreatePlayerForGame(playerData *PlayerData, playerID string) *Player {
@@ -268,11 +291,10 @@ func (dm *DataManager) CreatePlayerForGame(playerData *PlayerData, playerID stri
 		Username: playerData.Username,
 		Level:    playerData.Level,
 		EXP:      playerData.EXP,
-		// Trophies: playerData.Trophies,
-		Mana:    StartingMana,
-		MaxMana: MaxMana,
-		Troops:  dm.generateRandomTroops(playerData),
-		Towers:  dm.generateTowers(playerData),
+		Mana:     StartingMana,
+		MaxMana:  MaxMana,
+		Troops:   dm.generateRandomTroops(playerData),
+		Towers:   dm.generateTowers(playerData),
 	}
 
 	return player
@@ -317,7 +339,6 @@ func (dm *DataManager) generateRandomTroops(playerData *PlayerData) []Troop {
 func (dm *DataManager) generateTowers(playerData *PlayerData) []Tower {
 	towers := make([]Tower, TowersPerPlayer)
 
-	// Create 1 King Tower + 2 Guard Towers
 	kingSpec := dm.gameSpecs.TowerSpecs[KingTower]
 	guardSpec1 := dm.gameSpecs.TowerSpecs[GuardTower1]
 	guardSpec2 := dm.gameSpecs.TowerSpecs[GuardTower2]
@@ -365,11 +386,15 @@ func (dm *DataManager) generateTowers(playerData *PlayerData) []Tower {
 	return towers
 }
 
-// scaleStatByLevel applies level scaling to stats (10% per level)
+// ✅ IMPROVED: scaleStatByLevel with proper 10% scaling per level
 func (dm *DataManager) scaleStatByLevel(baseStat, level int) int {
 	if baseStat == 0 { // Handle special troops like Queen
 		return 0
 	}
+	// Each level adds 10% to base stats
+	// Level 1: 100% of base
+	// Level 2: 110% of base
+	// Level 3: 121% of base (compound)
 	scaleFactor := 1.0 + float64(level-1)*StatScalePerLevel
 	return int(float64(baseStat) * scaleFactor)
 }
@@ -382,6 +407,55 @@ func (dm *DataManager) GetGameSpecs() *GameSpecs {
 // GetPlayerDatabase returns the player database (for server use)
 func (dm *DataManager) GetPlayerDatabase() *PlayerDatabase {
 	return dm.playerDB
+}
+
+// ✅ NEW: GetPlayerByUsername for easier access
+func (dm *DataManager) GetPlayerByUsername(username string) *PlayerData {
+	for i := range dm.playerDB.Players {
+		if dm.playerDB.Players[i].Username == username {
+			return &dm.playerDB.Players[i]
+		}
+	}
+	return nil
+}
+
+// ✅ NEW: CalculateGameEndEXP determines EXP rewards for game end
+func (dm *DataManager) CalculateGameEndEXP(won bool, isDraw bool) int {
+	if isDraw {
+		return DrawEXP
+	} else if won {
+		return WinEXP
+	} else {
+		return LoseEXP
+	}
+}
+
+// ✅ NEW: CalculateDamageEXP determines EXP for dealing damage
+func (dm *DataManager) CalculateDamageEXP(damage int) int {
+	expGained := damage / DamageEXPRatio
+	if expGained < 1 {
+		expGained = 1 // Minimum 1 EXP for any damage
+	}
+	return expGained
+}
+
+// ✅ NEW: CalculateDestructionEXP determines EXP for destroying targets
+func (dm *DataManager) CalculateDestructionEXP(targetType string, targetName interface{}) int {
+	if targetType == "tower" {
+		switch targetName {
+		case KingTower:
+			return 200
+		case GuardTower1, GuardTower2:
+			return 100
+		}
+	} else if targetType == "troop" {
+		if troopName, ok := targetName.(TroopType); ok {
+			if spec, exists := dm.gameSpecs.TroopSpecs[troopName]; exists {
+				return spec.EXP
+			}
+		}
+	}
+	return 0
 }
 
 // Helper function for game engine

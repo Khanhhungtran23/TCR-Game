@@ -25,6 +25,7 @@ type Display struct {
 	infoColor    *color.Color
 	playerColor  *color.Color
 	enemyColor   *color.Color
+	expColor     *color.Color // ✅ NEW: Color for EXP messages
 }
 
 // NewDisplay creates a new display instance with configured colors
@@ -42,6 +43,7 @@ func NewDisplay() *Display {
 		infoColor:    color.New(color.FgWhite),
 		playerColor:  color.New(color.FgCyan),
 		enemyColor:   color.New(color.FgMagenta),
+		expColor:     color.New(color.FgGreen, color.Bold), // ✅ NEW: Green bold for EXP
 	}
 }
 
@@ -119,6 +121,13 @@ func (d *Display) PrintAttack(attacker, target string, damage int, isCrit bool) 
 	}
 }
 
+// ✅ NEW: PrintCounterAttack displays tower counter-attacks
+func (d *Display) PrintCounterAttack(attacker, target string, damage int) {
+	timestamp := time.Now().Format("15:04:05")
+	d.warningColor.Printf("[%s] [COUNTER] %s strikes back at %s - Damage: %d\n",
+		timestamp, attacker, target, damage)
+}
+
 // PrintHeal displays healing events
 func (d *Display) PrintHeal(healer, target string, amount int) {
 	timestamp := time.Now().Format("15:04:05")
@@ -126,29 +135,54 @@ func (d *Display) PrintHeal(healer, target string, amount int) {
 		timestamp, healer, target, amount)
 }
 
-// PrintGameEnd displays game end results
+// ✅ UPDATED: PrintGameEnd with detailed EXP display
 func (d *Display) PrintGameEnd(winner string, isPlayerWinner bool, towersDestroyed map[string]int) {
-	d.infoColor.Println("\n[TIME'S UP]")
+	d.infoColor.Println("\n[GAME ENDED]")
 
 	// Display towers destroyed
 	var parts []string
 	for player, count := range towersDestroyed {
 		parts = append(parts, fmt.Sprintf("%s destroyed %d tower(s)", player, count))
 	}
-	d.infoColor.Printf("[WINNER] %s\n", strings.Join(parts, " | "))
+	d.infoColor.Printf("[RESULT] %s\n", strings.Join(parts, " | "))
 
 	// Display winner with appropriate color
-	if isPlayerWinner {
+	if winner == "draw" {
+		d.warningColor.Printf("\n🤝 DRAW! Both players fought valiantly! 🤝\n")
+	} else if isPlayerWinner {
 		d.winColor.Printf("\n🎉 VICTORY! You defeated your opponent! 🎉\n")
 	} else {
 		d.loseColor.Printf("\n💀 DEFEAT! Better luck next time! 💀\n")
 	}
 }
 
-// PrintExperience displays experience gained
-func (d *Display) PrintExperience(player1Exp, player2Exp int) {
-	d.infoColor.Printf("[EXP] Player1 +%d EXP | Player2 +%d EXP\n",
-		player1Exp, player2Exp)
+// ✅ UPDATED: PrintExperience with detailed breakdown
+func (d *Display) PrintExperience(playerExp, opponentExp int) {
+	d.expColor.Printf("═══════════════ EXPERIENCE GAINED ═══════════════\n")
+	d.expColor.Printf("🌟 YOU: +%d EXP\n", playerExp)
+	d.infoColor.Printf("🌟 OPPONENT: +%d EXP\n", opponentExp)
+	d.expColor.Printf("═══════════════════════════════════════════════════\n")
+}
+
+// ✅ NEW: PrintEXPGain for individual EXP gains during battle
+func (d *Display) PrintEXPGain(amount int, reason string, isPlayer bool) {
+	timestamp := time.Now().Format("15:04:05")
+	if isPlayer {
+		d.expColor.Printf("[%s] [EXP] +%d EXP for %s\n", timestamp, amount, reason)
+	} else {
+		d.infoColor.Printf("[%s] [EXP] Opponent gained %d EXP for %s\n", timestamp, amount, reason)
+	}
+}
+
+// ✅ NEW: PrintLevelUp notification
+func (d *Display) PrintLevelUp(newLevel int, isPlayer bool) {
+	timestamp := time.Now().Format("15:04:05")
+	if isPlayer {
+		d.winColor.Printf("[%s] [LEVEL UP!] 🎉 You reached Level %d! 🎉\n", timestamp, newLevel)
+		d.expColor.Printf("[%s] [LEVEL UP!] All troops and towers +10%% stats!\n", timestamp)
+	} else {
+		d.infoColor.Printf("[%s] [LEVEL UP!] Opponent reached Level %d\n", timestamp, newLevel)
+	}
 }
 
 // PrintDataSaved displays data persistence confirmation
@@ -165,8 +199,6 @@ func (d *Display) PrintPlayerStatus(player game.Player, isCurrentPlayer bool) {
 		colorFunc = d.enemyColor
 	}
 
-	// colorFunc.Printf("Player: %s | Level: %d | Trophies: %d | Mana: %d/%d\n",
-	// 	player.Username, player.Level, player.Trophies, player.Mana, player.MaxMana)
 	colorFunc.Printf("Player: %s | Level: %d | Mana: %d/%d\n",
 		player.Username, player.Level, player.Mana, player.MaxMana)
 }
@@ -268,4 +300,15 @@ func (d *Display) PrintTroopDestroyed(destroyerName, troopName, ownerName string
 		d.warningColor.Printf("[%s] [TROOP LOST] %s destroyed your %s! 💀\n",
 			timestamp, destroyerName, troopName)
 	}
+}
+
+// ✅ NEW: PrintSurrenderResult displays surrender outcome
+func (d *Display) PrintSurrenderResult(winner string, isPlayerWinner bool) {
+	d.PrintSeparator()
+	if isPlayerWinner {
+		d.winColor.Printf("🏳️ OPPONENT SURRENDERED! YOU WIN! 🏳️\n")
+	} else {
+		d.loseColor.Printf("🏳️ YOU SURRENDERED! OPPONENT WINS! 🏳️\n")
+	}
+	d.PrintSeparator()
 }

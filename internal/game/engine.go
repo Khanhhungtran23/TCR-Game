@@ -10,16 +10,17 @@ import (
 
 // GameEngine handles all game logic and state management
 type GameEngine struct {
-	gameState  *GameState
-	gameSpecs  *GameSpecs
-	eventQueue []CombatAction
-	gameTimer  *time.Timer
-	isRunning  bool
-	eventChan  chan CombatAction
+	gameState   *GameState
+	gameSpecs   *GameSpecs
+	eventQueue  []CombatAction
+	gameTimer   *time.Timer
+	isRunning   bool
+	eventChan   chan CombatAction
+	dataManager *DataManager // ✅ NEW: Add DataManager reference for EXP updates
 }
 
 // NewGameEngine creates a new game engine instance
-func NewGameEngine(player1, player2 *Player, gameMode string, specs *GameSpecs) *GameEngine {
+func NewGameEngine(player1, player2 *Player, gameMode string, specs *GameSpecs, dataManager *DataManager) *GameEngine {
 	// Initialize players with random troops and leveled stats
 	initializePlayerForGame(player1, specs)
 	initializePlayerForGame(player2, specs)
@@ -43,11 +44,12 @@ func NewGameEngine(player1, player2 *Player, gameMode string, specs *GameSpecs) 
 	}
 
 	return &GameEngine{
-		gameState:  gameState,
-		gameSpecs:  specs,
-		eventQueue: make([]CombatAction, 0),
-		isRunning:  false,
-		eventChan:  make(chan CombatAction, 100),
+		gameState:   gameState,
+		gameSpecs:   specs,
+		eventQueue:  make([]CombatAction, 0),
+		isRunning:   false,
+		eventChan:   make(chan CombatAction, 100),
+		dataManager: dataManager, // ✅ NEW: Store DataManager reference
 	}
 }
 
@@ -65,7 +67,6 @@ func (ge *GameEngine) StartGame() error {
 
 // startSimpleMode initializes turn-based gameplay
 func (ge *GameEngine) startSimpleMode() error {
-	// Simple mode is turn-based, no timer needed
 	ge.logEvent("GAME_START", ge.gameState.CurrentTurn, map[string]interface{}{
 		"mode": "Simple TCR",
 	})
@@ -122,9 +123,8 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		return nil, fmt.Errorf("troop not available")
 	}
 
-	// ✅ REVIVE TROOP: Reset HP to original stats khi deploy trong Simple mode
+	// ✅ REVIVE TROOP: Reset HP to original stats when deploy in Simple mode
 	if ge.gameState.GameMode == ModeSimple {
-		// Lấy base stats từ specs và scale theo level
 		baseSpec := ge.gameSpecs.TroopSpecs[troopName]
 		playerLevel := selectedTroop.Level
 
@@ -145,11 +145,10 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		if player.Mana < selectedTroop.MANA {
 			return nil, fmt.Errorf("insufficient mana: need %d, have %d", selectedTroop.MANA, player.Mana)
 		}
-		// Deduct mana only in Enhanced mode
 		player.Mana -= selectedTroop.MANA
 	}
 
-	// ✅ INCREMENT COUNTER FOR ALL DEPLOYMENTS (including Queen)
+	// ✅ INCREMENT COUNTER FOR ALL DEPLOYMENTS
 	if ge.gameState.GameMode == ModeSimple {
 		player.TroopsDeployedThisTurn++
 	}
@@ -158,7 +157,6 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 	if troopName == Queen {
 		action, err := ge.handleQueenSummon(playerID)
 		if err != nil {
-			// ❗ Rollback counter if Queen summon fails
 			if ge.gameState.GameMode == ModeSimple {
 				player.TroopsDeployedThisTurn--
 			}
@@ -194,7 +192,6 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		"troops_deployed_this_turn": player.TroopsDeployedThisTurn,
 	})
 
-	// Update game state in memory
 	ge.updatePlayerInState(player)
 
 	if ge.gameState.GameMode == ModeEnhanced {
@@ -204,30 +201,27 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 	return &action, nil
 }
 
-// autoAttackSequence handles the full combat sequence for Simple mode
+// autoAttackSequence handles the full combat sequence for Enhanced mode
 func (ge *GameEngine) autoAttackSequence(playerID string, troopName TroopType) {
-	// Wait a moment for deploy animation
 	time.Sleep(500 * time.Millisecond)
 
-	// 1. Troop attacks enemy tower
 	attackAction := ge.executeAutoAttack(playerID, troopName)
 	if attackAction != nil {
 		ge.broadcastAction(*attackAction)
 
-		// 2. Tower counter-attacks (1 second later)
-		time.Sleep(1 * time.Second)
+		// ✅ FIXED: Tower counter-attacks after 2 seconds
+		time.Sleep(2 * time.Second)
 		counterAction := ge.executeCounterAttack(playerID, troopName)
 		if counterAction != nil {
 			ge.broadcastAction(*counterAction)
 		}
 	}
 
-	// 3. Auto end turn (1 second after counter-attack)
 	time.Sleep(1 * time.Second)
 	ge.autoEndTurn(playerID)
 }
 
-// executeAutoAttack makes troop attack the weakest available tower
+// ✅ FIXED: executeAutoAttack with correct damage calculation
 func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *CombatAction {
 	player := ge.getPlayer(playerID)
 	opponent := ge.getOpponent(playerID)
@@ -236,7 +230,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		return nil
 	}
 
-	// Find attacker troop
 	var attacker *Troop
 	for i := range player.Troops {
 		if player.Troops[i].Name == troopName {
@@ -245,14 +238,13 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		}
 	}
 
-	if attacker == nil {
+	if attacker == nil || attacker.HP <= 0 {
 		return nil
 	}
 
-	// Find target tower with UPDATED RULES
+	// Find target tower with updated rules
 	var targetTowerIndex int = -1
 
-	// Check if any Guard Tower is destroyed - if so, can attack King Tower
 	guardTowersAlive := 0
 	for i := range opponent.Towers {
 		if (opponent.Towers[i].Name == GuardTower1 || opponent.Towers[i].Name == GuardTower2) && opponent.Towers[i].HP > 0 {
@@ -260,7 +252,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		}
 	}
 
-	// If all Guard Towers destroyed, can attack King Tower
 	if guardTowersAlive == 0 {
 		for i := range opponent.Towers {
 			if opponent.Towers[i].Name == KingTower && opponent.Towers[i].HP > 0 {
@@ -269,7 +260,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 			}
 		}
 	} else {
-		// Otherwise, attack weakest Guard Tower
 		for i := range opponent.Towers {
 			if (opponent.Towers[i].Name == GuardTower1 || opponent.Towers[i].Name == GuardTower2) && opponent.Towers[i].HP > 0 {
 				if targetTowerIndex == -1 || opponent.Towers[i].HP < opponent.Towers[targetTowerIndex].HP {
@@ -283,7 +273,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		return nil
 	}
 
-	// Get correct target tower reference
 	var targetTower *Tower
 	if opponent.ID == ge.gameState.Player1.ID {
 		targetTower = &ge.gameState.Player1.Towers[targetTowerIndex]
@@ -297,15 +286,22 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		damage = 0
 	}
 
-	// ✅ APPLY DAMAGE ONLY ONCE to correct tower
 	oldHP := targetTower.HP
 	targetTower.HP -= damage
 	if targetTower.HP < 0 {
 		targetTower.HP = 0
 	}
 
-	// ✅ CHECK AND LOG TOWER DESTRUCTION
+	// ✅ NEW: Award EXP for tower damage
+	if damage > 0 {
+		ge.awardEXPForDamage(playerID, damage, "tower")
+	}
+
+	// Check tower destruction
 	if targetTower.HP == 0 && oldHP > 0 {
+		// ✅ NEW: Award EXP for tower destruction
+		ge.awardEXPForDestruction(playerID, "tower", targetTower.Name)
+
 		ge.logEvent("TOWER_DESTROYED", "", map[string]interface{}{
 			"destroyer":    player.Username,
 			"tower_name":   targetTower.Name,
@@ -313,7 +309,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 			"final_damage": damage,
 		})
 
-		// Broadcast tower destruction
 		destroyAction := CombatAction{
 			Type:       "TOWER_DESTROYED",
 			PlayerID:   playerID,
@@ -331,32 +326,10 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 
 		ge.handleTowerDestroyed(opponent, targetTower)
 
-		// Check win conditions immediately
 		if ge.checkWinConditions() {
 			ge.endGame()
-			winAction := CombatAction{
-				Type:      "GAME_END",
-				PlayerID:  ge.gameState.Winner,
-				Timestamp: time.Now(),
-				Data: map[string]interface{}{
-					"winner": ge.gameState.Winner,
-					"reason": "king_tower_destroyed",
-				},
-			}
-			ge.broadcastAction(winAction)
 		}
 	}
-
-	// Log attack details
-	ge.logEvent("ATTACK", playerID, map[string]interface{}{
-		"attacker":     troopName,
-		"attacker_atk": attacker.ATK,
-		"target":       targetTower.Name,
-		"target_def":   targetTower.DEF,
-		"damage":       damage,
-		"target_hp":    targetTower.HP,
-		"old_hp":       oldHP,
-	})
 
 	// Create action
 	action := CombatAction{
@@ -377,7 +350,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	return &action
 }
 
-// executeCounterAttack makes tower counter-attack the troop
+// ✅ FIXED: executeCounterAttack with correct damage calculation and 2s delay
 func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType) *CombatAction {
 	player := ge.getPlayer(playerID)
 	opponent := ge.getOpponent(playerID)
@@ -386,7 +359,6 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		return nil
 	}
 
-	// Find the troop that just attacked
 	var targetTroop *Troop
 	for i := range player.Troops {
 		if player.Troops[i].Name == troopName {
@@ -399,7 +371,6 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		return nil
 	}
 
-	// Find a tower that can counter-attack (alive towers)
 	var attackingTower *Tower
 	for i := range opponent.Towers {
 		if opponent.Towers[i].HP > 0 {
@@ -418,15 +389,22 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		damage = 0
 	}
 
-	// Apply damage to troop
 	oldHP := targetTroop.HP
 	targetTroop.HP -= damage
 	if targetTroop.HP < 0 {
 		targetTroop.HP = 0
 	}
 
-	// ✅ CHECK AND LOG TROOP DESTRUCTION
+	// ✅ NEW: Award EXP for troop damage
+	if damage > 0 {
+		ge.awardEXPForDamage(opponent.ID, damage, "troop")
+	}
+
+	// Check troop destruction
 	if targetTroop.HP == 0 && oldHP > 0 {
+		// ✅ NEW: Award EXP for troop destruction
+		ge.awardEXPForDestruction(opponent.ID, "troop", TroopType(targetTroop.Name))
+
 		ge.logEvent("TROOP_DESTROYED", "", map[string]interface{}{
 			"destroyer":    opponent.Username,
 			"troop_name":   targetTroop.Name,
@@ -434,7 +412,6 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 			"final_damage": damage,
 		})
 
-		// Broadcast troop destruction
 		destroyAction := CombatAction{
 			Type:       "TROOP_DESTROYED",
 			PlayerID:   opponent.ID,
@@ -451,10 +428,9 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		ge.broadcastAction(destroyAction)
 	}
 
-	// Update game state
 	ge.updatePlayerInState(player)
 
-	// Log counter-attack details
+	// ✅ NEW: Log counter-attack for console display
 	ge.logEvent("COUNTER_ATTACK", opponent.ID, map[string]interface{}{
 		"attacker":     attackingTower.Name,
 		"attacker_atk": attackingTower.ATK,
@@ -463,9 +439,9 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		"damage":       damage,
 		"target_hp":    targetTroop.HP,
 		"old_hp":       oldHP,
+		"message":      fmt.Sprintf("%s counter-attacks %s for %d damage!", attackingTower.Name, troopName, damage),
 	})
 
-	// Create counter-attack action
 	action := CombatAction{
 		Type:       ActionAttack,
 		PlayerID:   opponent.ID,
@@ -485,6 +461,54 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 	return &action
 }
 
+// ✅ NEW: Award EXP for dealing damage
+func (ge *GameEngine) awardEXPForDamage(playerID string, damage int, targetType string) {
+	baseEXP := damage / 50 // 1 EXP per 50 damage
+	if baseEXP < 1 {
+		baseEXP = 1
+	}
+
+	player := ge.getPlayer(playerID)
+	if player != nil {
+		player.EXP += baseEXP
+		ge.logEvent("EXP_GAINED", playerID, map[string]interface{}{
+			"amount": baseEXP,
+			"reason": fmt.Sprintf("dealing %d damage to %s", damage, targetType),
+		})
+	}
+}
+
+// ✅ NEW: Award EXP for destroying targets
+func (ge *GameEngine) awardEXPForDestruction(playerID string, targetType string, targetName interface{}) {
+	var expAmount int
+
+	if targetType == "tower" {
+		switch targetName {
+		case KingTower:
+			expAmount = 200
+		case GuardTower1, GuardTower2:
+			expAmount = 100
+		}
+	} else if targetType == "troop" {
+		if troopName, ok := targetName.(TroopType); ok {
+			if spec, exists := ge.gameSpecs.TroopSpecs[troopName]; exists {
+				expAmount = spec.EXP
+			}
+		}
+	}
+
+	if expAmount > 0 {
+		player := ge.getPlayer(playerID)
+		if player != nil {
+			player.EXP += expAmount
+			ge.logEvent("EXP_GAINED", playerID, map[string]interface{}{
+				"amount": expAmount,
+				"reason": fmt.Sprintf("destroying %s %s", targetType, targetName),
+			})
+		}
+	}
+}
+
 // autoEndTurn automatically ends turn and switches to opponent
 func (ge *GameEngine) autoEndTurn(playerID string) {
 	if ge.gameState.GameMode != ModeSimple {
@@ -495,10 +519,8 @@ func (ge *GameEngine) autoEndTurn(playerID string) {
 		return
 	}
 
-	// Switch turn
 	ge.switchTurn()
 
-	// Create turn end action
 	action := CombatAction{
 		Type:      "TURN_END",
 		PlayerID:  playerID,
@@ -512,44 +534,144 @@ func (ge *GameEngine) autoEndTurn(playerID string) {
 		"next_turn": ge.gameState.CurrentTurn,
 	})
 
-	// Broadcast turn change
 	ge.broadcastAction(action)
 }
 
-// broadcastAction sends action to event channel for server broadcasting
-func (ge *GameEngine) broadcastAction(action CombatAction) {
-	select {
-	case ge.eventChan <- action:
-		// Successfully sent
-	default:
-		// Channel full, add to queue
-		ge.eventQueue = append(ge.eventQueue, action)
-	}
-}
+// ExecuteAttack handles manual combat between troops and towers
+func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, targetType, targetName string) (*CombatAction, error) {
+	player := ge.getPlayer(playerID)
+	opponent := ge.getOpponent(playerID)
 
-// Check win conditions after each action
-func (ge *GameEngine) checkAndHandleWinConditions() {
+	if player == nil || opponent == nil {
+		return nil, fmt.Errorf("invalid players")
+	}
+
+	var attacker *Troop
+	for i := range player.Troops {
+		if player.Troops[i].Name == attackerName {
+			attacker = &player.Troops[i]
+			break
+		}
+	}
+
+	if attacker == nil {
+		return nil, fmt.Errorf("attacker troop not found")
+	}
+
+	if attacker.HP <= 0 {
+		return nil, fmt.Errorf("troop is destroyed and cannot attack")
+	}
+
+	if ge.gameState.GameMode == ModeSimple {
+		if err := ge.validateAttackTargetUpdated(opponent, targetType, targetName); err != nil {
+			return nil, err
+		}
+	}
+
+	var targetTower *Tower
+	if targetType == "tower" {
+		for i := range opponent.Towers {
+			if string(opponent.Towers[i].Name) == targetName {
+				if opponent.ID == ge.gameState.Player1.ID {
+					targetTower = &ge.gameState.Player1.Towers[i]
+				} else {
+					targetTower = &ge.gameState.Player2.Towers[i]
+				}
+				break
+			}
+		}
+		if targetTower == nil {
+			return nil, fmt.Errorf("target tower not found")
+		}
+		if targetTower.HP <= 0 {
+			return nil, fmt.Errorf("target tower is already destroyed")
+		}
+	}
+
+	// ✅ CORRECT DAMAGE CALCULATION
+	damage := attacker.ATK - targetTower.DEF
+	if damage < 0 {
+		damage = 0
+	}
+
+	oldHP := targetTower.HP
+	targetTower.HP -= damage
+	if targetTower.HP < 0 {
+		targetTower.HP = 0
+	}
+
+	// Award EXP for damage
+	if damage > 0 {
+		ge.awardEXPForDamage(playerID, damage, "tower")
+	}
+
+	// Check if tower is destroyed
+	if targetTower.HP == 0 && oldHP > 0 {
+		ge.awardEXPForDestruction(playerID, "tower", targetTower.Name)
+		ge.handleTowerDestroyed(opponent, targetTower)
+	}
+
+	action := CombatAction{
+		Type:       ActionAttack,
+		PlayerID:   playerID,
+		TroopName:  attackerName,
+		TargetType: targetType,
+		TargetName: targetName,
+		Damage:     damage,
+		IsCrit:     false,
+		Timestamp:  time.Now(),
+		Data: map[string]interface{}{
+			"target_hp": targetTower.HP,
+			"old_hp":    oldHP,
+		},
+	}
+
+	ge.updatePlayerInState(opponent)
+
+	// ✅ FIXED: Counter-attack with 2 second delay
+	if ge.gameState.GameMode == ModeSimple {
+		go func() {
+			time.Sleep(2 * time.Second)
+			counterAction := ge.executeCounterAttack(playerID, attackerName)
+			if counterAction != nil {
+				ge.broadcastAction(*counterAction)
+			}
+		}()
+	}
+
 	if ge.checkWinConditions() {
 		ge.endGame()
-		// Broadcast game end
-		action := CombatAction{
-			Type:      "GAME_END",
-			PlayerID:  ge.gameState.Winner,
-			Timestamp: time.Now(),
-			Data: map[string]interface{}{
-				"winner": ge.gameState.Winner,
-				"reason": "king_tower_destroyed",
-			},
-		}
-		ge.broadcastAction(action)
 	}
+
+	return &action, nil
+}
+
+// validateAttackTargetUpdated with new targeting rules
+func (ge *GameEngine) validateAttackTargetUpdated(opponent *Player, targetType, targetName string) error {
+	if targetType != "tower" {
+		return nil
+	}
+
+	if targetName == "King Tower" {
+		guardTowersAlive := 0
+		for _, tower := range opponent.Towers {
+			if (tower.Name == GuardTower1 || tower.Name == GuardTower2) && tower.HP > 0 {
+				guardTowersAlive++
+			}
+		}
+
+		if guardTowersAlive == 2 {
+			return fmt.Errorf("must destroy at least one Guard Tower before attacking King Tower")
+		}
+	}
+
+	return nil
 }
 
 // handleQueenSummon handles Queen's special healing ability
 func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) {
 	player := ge.getPlayer(playerID)
 
-	// Find tower with lowest HP
 	var lowestTower *Tower
 	lowestHP := math.MaxInt32
 
@@ -564,7 +686,6 @@ func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) 
 		return nil, fmt.Errorf("no towers to heal")
 	}
 
-	// Heal for 300 HP (capped at max HP)
 	healAmount := 300
 	if lowestTower.HP+healAmount > lowestTower.MaxHP {
 		healAmount = lowestTower.MaxHP - lowestTower.HP
@@ -597,181 +718,10 @@ func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) 
 	return &action, nil
 }
 
-// ExecuteAttack handles combat between troops and towers
-func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, targetType, targetName string) (*CombatAction, error) {
-	player := ge.getPlayer(playerID)
-	opponent := ge.getOpponent(playerID)
-
-	if player == nil || opponent == nil {
-		return nil, fmt.Errorf("invalid players")
-	}
-
-	// Find attacker troop
-	var attacker *Troop
-	for i := range player.Troops {
-		if player.Troops[i].Name == attackerName {
-			attacker = &player.Troops[i]
-			break
-		}
-	}
-
-	if attacker == nil {
-		return nil, fmt.Errorf("attacker troop not found")
-	}
-
-	if attacker.HP <= 0 {
-		return nil, fmt.Errorf("troop is destroyed and cannot attack")
-	}
-
-	// ✅ UPDATED TARGETING RULES: Can attack King Tower if any Guard Tower is destroyed
-	if ge.gameState.GameMode == ModeSimple {
-		if err := ge.validateAttackTargetUpdated(opponent, targetType, targetName); err != nil {
-			return nil, err
-		}
-	}
-
-	// Find target
-	var targetTower *Tower
-	if targetType == "tower" {
-		for i := range opponent.Towers {
-			if string(opponent.Towers[i].Name) == targetName {
-				if opponent.ID == ge.gameState.Player1.ID {
-					targetTower = &ge.gameState.Player1.Towers[i]
-				} else {
-					targetTower = &ge.gameState.Player2.Towers[i]
-				}
-				break
-			}
-		}
-		if targetTower == nil {
-			return nil, fmt.Errorf("target tower not found")
-		}
-		if targetTower.HP <= 0 {
-			return nil, fmt.Errorf("target tower is already destroyed")
-		}
-	}
-
-	damage := attacker.ATK - targetTower.DEF
-	if damage < 0 {
-		damage = 0
-	}
-	isCrit := false
-
-	// Apply damage
-	oldHP := targetTower.HP
-	targetTower.HP -= damage
-	if targetTower.HP < 0 {
-		targetTower.HP = 0
-	}
-
-	// Check if tower is destroyed
-	if targetTower.HP == 0 && oldHP > 0 {
-		ge.logEvent("TOWER_DESTROYED", "", map[string]interface{}{
-			"destroyer":    player.Username,
-			"tower_name":   targetTower.Name,
-			"tower_owner":  opponent.Username,
-			"final_damage": damage,
-		})
-		ge.handleTowerDestroyed(opponent, targetTower)
-	}
-
-	action := CombatAction{
-		Type:       ActionAttack,
-		PlayerID:   playerID,
-		TroopName:  attackerName,
-		TargetType: targetType,
-		TargetName: targetName,
-		Damage:     damage,
-		IsCrit:     isCrit,
-		Timestamp:  time.Now(),
-		Data: map[string]interface{}{
-			"target_hp": targetTower.HP,
-			"old_hp":    oldHP,
-		},
-	}
-
-	// Update game state
-	ge.updatePlayerInState(opponent)
-
-	if ge.gameState.GameMode == ModeSimple {
-		go func() {
-			time.Sleep(1 * time.Second)
-			counterAction := ge.executeCounterAttack(playerID, attackerName)
-			if counterAction != nil {
-				ge.broadcastAction(*counterAction)
-			}
-		}()
-	}
-
-	// Check win conditions
-	if ge.checkWinConditions() {
-		ge.endGame()
-	}
-
-	return &action, nil
-}
-
-func (ge *GameEngine) validateAttackTargetUpdated(opponent *Player, targetType, targetName string) error {
-	if targetType != "tower" {
-		return nil // No restrictions on troop attacks
-	}
-
-	// ✅ UPDATED RULE: Can attack King Tower if ANY Guard Tower is destroyed
-	if targetName == "King Tower" {
-		guardTowersAlive := 0
-		for _, tower := range opponent.Towers {
-			if (tower.Name == GuardTower1 || tower.Name == GuardTower2) && tower.HP > 0 {
-				guardTowersAlive++
-			}
-		}
-
-		// If both Guard Towers are still alive, cannot attack King Tower
-		if guardTowersAlive == 2 {
-			return fmt.Errorf("must destroy at least one Guard Tower before attacking King Tower")
-		}
-	}
-
-	return nil
-}
-
-// calculateDamage implements the damage formula: DMG = ATK_A - DEF_B
-func (ge *GameEngine) calculateDamage(atk, def int, withCrit bool) int {
-	baseDamage := atk - def
-	if baseDamage < 0 {
-		baseDamage = 0
-	}
-
-	if withCrit {
-		// Enhanced mode: 20% damage increase for crits
-		return int(float64(baseDamage) * 1.2)
-	}
-
-	return baseDamage
-}
-
-// validateAttackTarget enforces Simple TCR targeting rules
-func (ge *GameEngine) validateAttackTarget(opponent *Player, targetType, targetName string) error {
-	if targetType != "tower" {
-		return nil // No restrictions on troop attacks
-	}
-
-	// Check if trying to attack King Tower while Guard Towers are alive
-	if targetName == "King Tower" {
-		for _, tower := range opponent.Towers {
-			if (tower.Name == GuardTower1 || tower.Name == GuardTower2) && tower.HP > 0 {
-				return fmt.Errorf("must destroy at least one Guard Tower before attacking King Tower")
-			}
-		}
-	}
-
-	return nil
-}
-
 // handleTowerDestroyed handles tower destruction logic
 func (ge *GameEngine) handleTowerDestroyed(player *Player, tower *Tower) {
 	tower.IsActive = false
 
-	// Update towers killed count
 	if player.ID == ge.gameState.Player1.ID {
 		ge.gameState.TowersKilled.Player1++
 	} else {
@@ -784,35 +734,6 @@ func (ge *GameEngine) handleTowerDestroyed(player *Player, tower *Tower) {
 	})
 }
 
-// manaRegeneration handles mana regeneration for Enhanced mode
-func (ge *GameEngine) manaRegeneration() {
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
-
-	for ge.isRunning {
-		select {
-		case <-ticker.C:
-			// Regenerate mana for both players
-			if ge.gameState.Player1.Mana < MaxMana {
-				ge.gameState.Player1.Mana += ManaRegenPerSecond
-				if ge.gameState.Player1.Mana > MaxMana {
-					ge.gameState.Player1.Mana = MaxMana
-				}
-			}
-
-			if ge.gameState.Player2.Mana < MaxMana {
-				ge.gameState.Player2.Mana += ManaRegenPerSecond
-				if ge.gameState.Player2.Mana > MaxMana {
-					ge.gameState.Player2.Mana = MaxMana
-				}
-			}
-
-			// Decrease time left
-			ge.gameState.TimeLeft--
-		}
-	}
-}
-
 // gameTimeoutHandler handles game timeout for Enhanced mode
 func (ge *GameEngine) gameTimeoutHandler() {
 	<-ge.gameTimer.C
@@ -823,7 +744,6 @@ func (ge *GameEngine) gameTimeoutHandler() {
 
 // checkWinConditions checks if game should end
 func (ge *GameEngine) checkWinConditions() bool {
-	// Check if King Tower is destroyed
 	for _, tower := range ge.gameState.Player1.Towers {
 		if tower.Name == KingTower && tower.HP == 0 {
 			ge.gameState.Winner = ge.gameState.Player2.ID
@@ -851,7 +771,6 @@ func (ge *GameEngine) EndTurn(playerID string) error {
 		return fmt.Errorf("not your turn")
 	}
 
-	// Switch to next player
 	ge.switchTurn()
 
 	ge.logEvent("TURN_END", playerID, map[string]interface{}{
@@ -861,17 +780,87 @@ func (ge *GameEngine) EndTurn(playerID string) error {
 	return nil
 }
 
+// ✅ NEW: Surrender with EXP handling
+func (ge *GameEngine) Surrender(playerID string) error {
+	// Determine winner (opponent of surrendering player)
+	if playerID == ge.gameState.Player1.ID {
+		ge.gameState.Winner = ge.gameState.Player2.ID
+	} else {
+		ge.gameState.Winner = ge.gameState.Player1.ID
+	}
+
+	// Award EXP for surrender
+	ge.awardGameEndEXP()
+
+	ge.endGame()
+
+	ge.logEvent("SURRENDER", playerID, map[string]interface{}{
+		"winner": ge.gameState.Winner,
+		"reason": "opponent_surrendered",
+	})
+
+	return nil
+}
+
+// ✅ NEW: Award EXP at game end
+func (ge *GameEngine) awardGameEndEXP() {
+	var winnerEXP, loserEXP int
+
+	if ge.gameState.Winner == "draw" {
+		winnerEXP = DrawEXP
+		loserEXP = DrawEXP
+	} else {
+		winnerEXP = WinEXP
+		// loserEXP = LoseEXP
+	}
+
+	// Award EXP to both players
+	ge.gameState.Player1.EXP += loserEXP
+	ge.gameState.Player2.EXP += loserEXP
+
+	if ge.gameState.Winner == ge.gameState.Player1.ID {
+		ge.gameState.Player1.EXP += (winnerEXP - loserEXP) // Add difference for winner
+	} else if ge.gameState.Winner == ge.gameState.Player2.ID {
+		ge.gameState.Player2.EXP += (winnerEXP - loserEXP)
+	}
+
+	// ✅ NEW: Save EXP to database
+	if ge.dataManager != nil {
+		isWinner1 := ge.gameState.Winner == ge.gameState.Player1.ID
+		isWinner2 := ge.gameState.Winner == ge.gameState.Player2.ID
+
+		finalEXP1 := loserEXP
+		finalEXP2 := loserEXP
+
+		if isWinner1 {
+			finalEXP1 = winnerEXP
+		} else if isWinner2 {
+			finalEXP2 = winnerEXP
+		}
+
+		ge.dataManager.UpdatePlayerData(ge.gameState.Player1.Username, finalEXP1, isWinner1, 0)
+		ge.dataManager.UpdatePlayerData(ge.gameState.Player2.Username, finalEXP2, isWinner2, 0)
+	}
+
+	// Log EXP gains
+	ge.logEvent("GAME_END_EXP", "", map[string]interface{}{
+		"player1_exp": ge.gameState.Player1.EXP,
+		"player2_exp": ge.gameState.Player2.EXP,
+		"winner":      ge.gameState.Winner,
+	})
+}
+
 // endGameByTimeout ends game when time runs out (Enhanced mode)
 func (ge *GameEngine) endGameByTimeout() {
-	// Determine winner by towers destroyed
 	if ge.gameState.TowersKilled.Player1 > ge.gameState.TowersKilled.Player2 {
-		ge.gameState.Winner = ge.gameState.Player2.ID // Player 2 destroyed more of Player 1's towers
+		ge.gameState.Winner = ge.gameState.Player2.ID
 	} else if ge.gameState.TowersKilled.Player2 > ge.gameState.TowersKilled.Player1 {
 		ge.gameState.Winner = ge.gameState.Player1.ID
 	} else {
 		ge.gameState.Winner = "draw"
 	}
 
+	ge.awardGameEndEXP()
 	ge.endGame()
 }
 
@@ -892,13 +881,11 @@ func (ge *GameEngine) endGame() {
 
 // switchTurn changes current turn (Simple mode)
 func (ge *GameEngine) switchTurn() {
-	// Reset deployment counters for both players
 	if ge.gameState.GameMode == ModeSimple {
 		ge.gameState.Player1.TroopsDeployedThisTurn = 0
 		ge.gameState.Player2.TroopsDeployedThisTurn = 0
 	}
 
-	// Switch turn
 	if ge.gameState.CurrentTurn == ge.gameState.Player1.ID {
 		ge.gameState.CurrentTurn = ge.gameState.Player2.ID
 	} else {
@@ -906,8 +893,45 @@ func (ge *GameEngine) switchTurn() {
 	}
 }
 
-// Helper functions
+// manaRegeneration handles mana regeneration for Enhanced mode
+func (ge *GameEngine) manaRegeneration() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
 
+	for ge.isRunning {
+		select {
+		case <-ticker.C:
+			if ge.gameState.Player1.Mana < MaxMana {
+				ge.gameState.Player1.Mana += ManaRegenPerSecond
+				if ge.gameState.Player1.Mana > MaxMana {
+					ge.gameState.Player1.Mana = MaxMana
+				}
+			}
+
+			if ge.gameState.Player2.Mana < MaxMana {
+				ge.gameState.Player2.Mana += ManaRegenPerSecond
+				if ge.gameState.Player2.Mana > MaxMana {
+					ge.gameState.Player2.Mana = MaxMana
+				}
+			}
+
+			ge.gameState.TimeLeft--
+		}
+	}
+}
+
+// broadcastAction sends action to event channel for server broadcasting
+func (ge *GameEngine) broadcastAction(action CombatAction) {
+	select {
+	case ge.eventChan <- action:
+		// Successfully sent
+	default:
+		// Channel full, add to queue
+		ge.eventQueue = append(ge.eventQueue, action)
+	}
+}
+
+// Helper functions
 func (ge *GameEngine) getPlayer(playerID string) *Player {
 	if ge.gameState.Player1.ID == playerID {
 		return &ge.gameState.Player1
@@ -935,8 +959,6 @@ func (ge *GameEngine) updatePlayerInState(player *Player) {
 }
 
 func (ge *GameEngine) logEvent(eventType, playerID string, data map[string]interface{}) {
-	// This would normally send to event channel for broadcasting
-	// For now, we'll store in the event queue
 	action := CombatAction{
 		Type:      eventType,
 		PlayerID:  playerID,
