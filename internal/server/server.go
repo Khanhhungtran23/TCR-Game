@@ -498,14 +498,15 @@ func (s *Server) endGame(gameID string, reason string) error {
 		return fmt.Errorf("game not found")
 	}
 
-	// Remove game from active games
-	delete(s.games, gameID)
+	gameState := gameEngine.GetGameState()
+	delete(s.games, gameID) // Remove game from active games
 	s.mu.Unlock()
 
-	gameState := gameEngine.GetGameState()
+	s.logger.Info("🎯 Processing endGame for %s, winner: %s", gameID, gameState.Winner)
 
 	// Find clients in this game
 	var client1, client2 *Client
+	s.mu.RLock()
 	for _, client := range s.clients {
 		if client.GameID == gameID {
 			if client.ID == gameState.Player1.ID {
@@ -515,60 +516,65 @@ func (s *Server) endGame(gameID string, reason string) error {
 			}
 		}
 	}
+	s.mu.RUnlock()
 
-	// Determine winner/loser based on reason
-	var winner, loser *Client
-	if reason == "surrender" {
-		// The current player (who called surrender) loses
-		// Find who surrendered by checking current context
-		// For now, assume Player1 surrendered if we can't determine
-		loser = client1
-		winner = client2
+	if client1 == nil || client2 == nil {
+		s.logger.Error("❌ Cannot find clients for game %s", gameID)
+		return fmt.Errorf("clients not found")
+	}
+
+	// ✅ Calculate EXP based on winner
+	var player1EXP, player2EXP int
+
+	if gameState.Winner == "draw" {
+		player1EXP = s.dataManager.CalculateGameEndEXP(false, true) // Draw
+		player2EXP = s.dataManager.CalculateGameEndEXP(false, true) // Draw
 	} else if gameState.Winner == gameState.Player1.ID {
-		winner = client1
-		loser = client2
-	} else if gameState.Winner == gameState.Player2.ID {
-		winner = client2
-		loser = client1
-	}
-
-	// Calculate rewards
-	var winnerExp, loserExp int
-	if reason == "draw" || gameState.Winner == "draw" {
-		winnerExp = s.dataManager.CalculateGameEndEXP(false, true) // draw
-		loserExp = winnerExp
+		player1EXP = s.dataManager.CalculateGameEndEXP(true, false)  // Win
+		player2EXP = s.dataManager.CalculateGameEndEXP(false, false) // Lose
 	} else {
-		winnerExp = s.dataManager.CalculateGameEndEXP(true, false) // win
-		loserExp = s.dataManager.CalculateGameEndEXP(false, false) // lose
+		player1EXP = s.dataManager.CalculateGameEndEXP(false, false) // Lose
+		player2EXP = s.dataManager.CalculateGameEndEXP(true, false)  // Win
 	}
 
-	// Send game end notifications
-	if winner != nil && loser != nil {
-		s.sendGameEndNotification(winner, true, fmt.Sprintf("%d", winnerExp), reason)
-		s.sendGameEndNotification(loser, false, fmt.Sprintf("%d", loserExp), reason)
-		winner.GameID = ""
-		loser.GameID = ""
-	} else if gameState.Winner == "draw" {
-		// Handle draw case
-		if client1 != nil {
-			s.sendGameEndNotification(client1, false, fmt.Sprintf("%d", loserExp), reason)
-			client1.GameID = ""
+	s.logger.Info("📊 EXP calculated - Player1: %d, Player2: %d", player1EXP, player2EXP)
+
+	// ✅ Send notifications to BOTH clients
+	if client1 != nil {
+		isWinner := gameState.Winner == client1.ID
+		s.logger.Info("📤 Sending game end to %s (winner: %t)", client1.Username, isWinner)
+
+		err := s.sendGameEndNotification(client1, isWinner, fmt.Sprintf("%d", player1EXP), player2EXP, reason)
+		if err != nil {
+			s.logger.Error("❌ Failed to send game end to %s: %v", client1.Username, err)
 		}
-		if client2 != nil {
-			s.sendGameEndNotification(client2, false, fmt.Sprintf("%d", loserExp), reason)
-			client2.GameID = ""
-		}
+		client1.GameID = ""
 	}
 
-	s.logger.Info("Game %s ended: %s", gameID, reason)
+	if client2 != nil {
+		isWinner := gameState.Winner == client2.ID
+		s.logger.Info("📤 Sending game end to %s (winner: %t)", client2.Username, isWinner)
+
+		err := s.sendGameEndNotification(client2, isWinner, fmt.Sprintf("%d", player2EXP), player1EXP, reason)
+		if err != nil {
+			s.logger.Error("❌ Failed to send game end to %s: %v", client2.Username, err)
+		}
+		client2.GameID = ""
+	}
+
+	s.logger.Info("✅ Game %s ended successfully: winner=%s, reason=%s", gameID, gameState.Winner, reason)
 	return nil
 }
 
 // sendGameEndNotification sends game end notification to a player
-func (s *Server) sendGameEndNotification(client *Client, won bool, expGained, reason string) error {
+func (s *Server) sendGameEndNotification(client *Client, won bool, expGained string, opponentExp int, reason string) error {
 	if client == nil {
 		return fmt.Errorf("client is nil")
 	}
+
+	// ✅ DEBUG: Log what we're sending
+	s.logger.Debug("📤 Sending game end to %s: won=%t, exp=%s, reason=%s",
+		client.Username, won, expGained, reason)
 
 	msg := network.NewMessage(network.MsgGameEnd, client.ID, "")
 
@@ -583,19 +589,26 @@ func (s *Server) sendGameEndNotification(client *Client, won bool, expGained, re
 		}
 	}
 
-	msg.SetData("game_end", map[string]interface{}{
-		"winner":     winnerName,
-		"reason":     reason,
-		"exp_gained": expGained,
-		"stats": map[string]interface{}{
-			"towers_destroyed": 0,   // Would be calculated from game state
-			"troops_deployed":  0,   // Would be tracked during game
-			"damage_dealt":     0,   // Would be tracked during game
-			"game_duration":    180, // Default for now
-		},
-	})
+	gameEndData := map[string]interface{}{
+		"winner":              winnerName,
+		"reason":              reason,
+		"exp_gained":          expGained,
+		"opponent_exp_gained": fmt.Sprintf("%d", opponentExp),
+	}
 
-	return s.sendMessage(client, msg)
+	// ✅ DEBUG: Log the exact data being sent
+	s.logger.Debug("📤 Game end data: %+v", gameEndData)
+
+	msg.SetData("game_end", gameEndData)
+
+	err := s.sendMessage(client, msg)
+	if err != nil {
+		s.logger.Error("❌ Failed to send game end message to %s: %v", client.Username, err)
+	} else {
+		s.logger.Debug("✅ Game end message sent successfully to %s", client.Username)
+	}
+
+	return err
 }
 
 // sendGameEndToClients sends game end notification to all players in game
@@ -706,26 +719,53 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 	for s.isRunning && gameEngine.IsRunning() {
 		select {
 		case event := <-eventChan:
-			// Broadcast event to all players in this game
 			gameState := gameEngine.GetGameState()
+
+			// ✅ Handle MANA_UPDATE separately
+			if event.Type == "MANA_UPDATE" {
+				player1Mana, _ := event.Data["player1_mana"].(int)
+				player2Mana, _ := event.Data["player2_mana"].(int)
+				timeLeft, _ := event.Data["time_left"].(int)
+
+				s.handleManaUpdate(gameState.ID, player1Mana, player2Mana, timeLeft)
+				continue
+			}
+
+			// ✅ Handle GAME_END events
+			if event.Type == "GAME_END" {
+				s.logger.Info("🎯 Received GAME_END event from engine")
+				reason, _ := event.Data["reason"].(string)
+				if reason == "" {
+					reason = "unknown"
+				}
+
+				// ✅ Call endGame to send notifications
+				s.endGame(gameState.ID, reason)
+				return // Exit the event handler
+			}
+
+			// Broadcast other events
 			s.broadcastGameEvent(gameState.ID, event, *gameState)
 
 			// Handle special events
 			if event.Type == "TURN_END" {
-				// Send turn change message
 				response := network.NewMessage(network.MsgTurnChange, "", gameState.ID)
 				response.SetData("current_turn", gameState.CurrentTurn)
 				response.SetData("game_state", gameState)
 				s.broadcastToGame(gameState.ID, response)
-			} else if event.Type == "GAME_END" {
-				// Handle game end
-				s.endGame(gameState.ID, "king_tower_destroyed")
 			}
+
 			if event.Type == "EXP_GAINED" {
-				// Broadcast EXP gain to client
 				s.broadcastGameEvent(gameState.ID, event, *gameState)
 			}
+
 		case <-time.After(100 * time.Millisecond):
+			// ✅ Check if game should timeout (backup check)
+			if gameEngine.GetGameState().TimeLeft <= 0 && gameEngine.IsRunning() {
+				s.logger.Info("🚨 Backup timeout detected, forcing game end...")
+				s.endGame(gameEngine.GetGameState().ID, "timeout")
+				return
+			}
 			continue
 		}
 	}
@@ -801,4 +841,18 @@ func (s *Server) handlePlayerDisconnect(gameID, disconnectedClientID string) {
 	// Remove game
 	delete(s.games, gameID)
 	s.logger.Info("Game %s ended due to player disconnect", gameID)
+}
+
+func (s *Server) handleManaUpdate(gameID string, player1Mana, player2Mana, timeLeft int) {
+	// Tạo MANA_UPDATE message
+	msg := network.NewMessage("MANA_UPDATE", "", gameID)
+	msg.SetData("mana_update", map[string]interface{}{
+		"player1_mana": player1Mana,
+		"player2_mana": player2Mana,
+		"time_left":    timeLeft,
+		"timestamp":    time.Now().Unix(),
+	})
+
+	// Gửi đến tất cả clients trong game
+	s.broadcastToGame(gameID, msg)
 }

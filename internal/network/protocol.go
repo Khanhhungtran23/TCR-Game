@@ -41,6 +41,7 @@ const (
 	MsgPing       MessageType = "PING"
 	MsgPong       MessageType = "PONG"
 	MsgDisconnect MessageType = "DISCONNECT"
+	MsgManaUpdate MessageType = "MANA_UPDATE"
 )
 
 // Message represents a network message between client and server

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"tcr-game/pkg/logger"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type GameEngine struct {
 	isRunning   bool
 	eventChan   chan CombatAction
 	dataManager *DataManager // ✅ NEW: Add DataManager reference for EXP updates
+	logger      *logger.Logger
 }
 
 // NewGameEngine creates a new game engine instance
@@ -49,7 +51,8 @@ func NewGameEngine(player1, player2 *Player, gameMode string, specs *GameSpecs, 
 		eventQueue:  make([]CombatAction, 0),
 		isRunning:   false,
 		eventChan:   make(chan CombatAction, 100),
-		dataManager: dataManager, // ✅ NEW: Store DataManager reference
+		dataManager: dataManager,
+		logger:      logger.Server,
 	}
 }
 
@@ -73,19 +76,22 @@ func (ge *GameEngine) startSimpleMode() error {
 	return nil
 }
 
-// startEnhancedMode initializes real-time gameplay with timer
 func (ge *GameEngine) startEnhancedMode() error {
 	// Start mana regeneration for both players
 	go ge.manaRegeneration()
 
-	// Start game timer (3 minutes)
+	// ✅ FIX: Start game timer immediately
 	ge.gameTimer = time.NewTimer(time.Duration(GameDurationSeconds) * time.Second)
 	go ge.gameTimeoutHandler()
+
+	// ✅ ENSURE: Game state time is set correctly
+	ge.gameState.TimeLeft = GameDurationSeconds
 
 	ge.logEvent("GAME_START", "", map[string]interface{}{
 		"mode":       "Enhanced TCR",
 		"duration":   GameDurationSeconds,
 		"mana_regen": ManaRegenPerSecond,
+		"start_time": time.Now(),
 	})
 
 	return nil
@@ -123,12 +129,33 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		return nil, fmt.Errorf("troop not available")
 	}
 
-	// ✅ REVIVE TROOP: Reset HP to original stats when deploy in Simple mode
-	if ge.gameState.GameMode == ModeSimple {
+	// ✅ REVIVE TROOP: Reset HP to full when deploy in Enhanced mode
+	if ge.gameState.GameMode == ModeEnhanced {
 		baseSpec := ge.gameSpecs.TroopSpecs[troopName]
 		playerLevel := selectedTroop.Level
 
 		// Restore to full HP (scaled by level)
+		fullHP := int(float64(baseSpec.HP) * (1.0 + float64(playerLevel-1)*StatScalePerLevel))
+		oldHP := selectedTroop.HP
+		selectedTroop.HP = fullHP
+		selectedTroop.MaxHP = fullHP
+
+		ge.logger.Debug("🔄 Revived %s: %d HP -> %d HP", troopName, oldHP, fullHP)
+
+		// ✅ Log revive event if troop was dead
+		if oldHP <= 0 {
+			ge.logEvent("TROOP_REVIVED", playerID, map[string]interface{}{
+				"troop":  troopName,
+				"old_hp": oldHP,
+				"new_hp": fullHP,
+				"max_hp": fullHP,
+			})
+		}
+	} else if ge.gameState.GameMode == ModeSimple {
+		// Simple mode revive logic (existing)
+		baseSpec := ge.gameSpecs.TroopSpecs[troopName]
+		playerLevel := selectedTroop.Level
+
 		fullHP := int(float64(baseSpec.HP) * (1.0 + float64(playerLevel-1)*StatScalePerLevel))
 		selectedTroop.HP = fullHP
 		selectedTroop.MaxHP = fullHP
@@ -183,17 +210,20 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		Data: map[string]interface{}{
 			"mana_left":                 player.Mana,
 			"troops_deployed_this_turn": player.TroopsDeployedThisTurn,
+			"troop_hp":                  selectedTroop.HP, // ✅ ADD: Current HP
 		},
 	}
 
 	ge.logEvent("SUMMON", playerID, map[string]interface{}{
 		"troop":                     troopName,
+		"troop_hp":                  selectedTroop.HP,
 		"mana_left":                 player.Mana,
 		"troops_deployed_this_turn": player.TroopsDeployedThisTurn,
 	})
 
 	ge.updatePlayerInState(player)
 
+	// ✅ Start attacking immediately in Enhanced mode
 	if ge.gameState.GameMode == ModeEnhanced {
 		go ge.autoAttackSequence(playerID, troopName)
 	}
@@ -218,11 +248,12 @@ func (ge *GameEngine) autoAttackSequence(playerID string, troopName TroopType) {
 
 	time.Sleep(1 * time.Second)
 	if !ge.checkWinConditions() {
-		ge.autoEndTurn(playerID)
+		// Just continue, no turn ending
+		return
 	}
 }
 
-// ✅ FIXED: executeAutoAttack with correct damage calculation
+// ✅ FIXED: executeAutoAttack with CRIT chance
 func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *CombatAction {
 	player := ge.getPlayer(playerID)
 	opponent := ge.getOpponent(playerID)
@@ -281,8 +312,19 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		targetTower = &ge.gameState.Player2.Towers[targetTowerIndex]
 	}
 
-	// ✅ CORRECT DAMAGE FORMULA: DMG = ATK_A - DEF_B (min 0)
-	damage := attacker.ATK - targetTower.DEF
+	// ✅ NEW: Check for CRIT in Enhanced mode
+	isCrit := false
+	attackDamage := attacker.ATK
+	if ge.gameState.GameMode == ModeEnhanced {
+		// Roll for crit chance
+		if rand.Float64() < attacker.CRIT {
+			isCrit = true
+			attackDamage = int(float64(attacker.ATK) * 1.5) // 1.5x damage on crit
+		}
+	}
+
+	// ✅ UPDATED DAMAGE FORMULA: DMG = ATK (or ATK * 1.5 if CRIT) - DEF_B (min 0)
+	damage := attackDamage - targetTower.DEF
 	if damage < 0 {
 		damage = 0
 	}
@@ -352,7 +394,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		TargetType: "tower",
 		TargetName: string(targetTower.Name),
 		Damage:     damage,
-		IsCrit:     false,
+		IsCrit:     isCrit, // ✅ NEW: Include crit info
 		Timestamp:  time.Now(),
 		Data: map[string]interface{}{
 			"target_hp": targetTower.HP,
@@ -363,7 +405,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	return &action
 }
 
-// ✅ FIXED: executeCounterAttack with correct damage calculation and 2s delay
+// ✅ FIXED: executeCounterAttack with CRIT chance
 func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType) *CombatAction {
 	player := ge.getPlayer(playerID)
 	opponent := ge.getOpponent(playerID)
@@ -396,8 +438,19 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		return nil
 	}
 
-	// ✅ CORRECT DAMAGE FORMULA: DMG = Tower_ATK - Troop_DEF (min 0)
-	damage := attackingTower.ATK - targetTroop.DEF
+	// ✅ NEW: Check for CRIT in Enhanced mode
+	isCrit := false
+	attackDamage := attackingTower.ATK
+	if ge.gameState.GameMode == ModeEnhanced {
+		// Roll for crit chance
+		if rand.Float64() < attackingTower.CRIT {
+			isCrit = true
+			attackDamage = int(float64(attackingTower.ATK) * 1.5) // 1.5x damage on crit
+		}
+	}
+
+	// ✅ UPDATED DAMAGE FORMULA: DMG = Tower_ATK (or ATK * 1.5 if CRIT) - Troop_DEF (min 0)
+	damage := attackDamage - targetTroop.DEF
 	if damage < 0 {
 		damage = 0
 	}
@@ -443,7 +496,6 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 
 	ge.updatePlayerInState(player)
 
-	// ✅ NEW: Log counter-attack for console display
 	ge.logEvent("COUNTER_ATTACK", opponent.ID, map[string]interface{}{
 		"attacker":     attackingTower.Name,
 		"attacker_atk": attackingTower.ATK,
@@ -452,6 +504,7 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		"damage":       damage,
 		"target_hp":    targetTroop.HP,
 		"old_hp":       oldHP,
+		"is_crit":      isCrit, // ✅ NEW: Include crit info
 		"message":      fmt.Sprintf("%s counter-attacks %s for %d damage!", attackingTower.Name, troopName, damage),
 	})
 
@@ -462,7 +515,7 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		TargetType: "troop",
 		TargetName: string(troopName),
 		Damage:     damage,
-		IsCrit:     false,
+		IsCrit:     isCrit, // ✅ NEW: Include crit info
 		Timestamp:  time.Now(),
 		Data: map[string]interface{}{
 			"target_hp":  targetTroop.HP,
@@ -601,8 +654,19 @@ func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, tar
 		}
 	}
 
-	// ✅ CORRECT DAMAGE CALCULATION
-	damage := attacker.ATK - targetTower.DEF
+	// ✅ NEW: Check for CRIT in Enhanced mode
+	isCrit := false
+	attackDamage := attacker.ATK
+	if ge.gameState.GameMode == ModeEnhanced {
+		// Roll for crit chance
+		if rand.Float64() < attacker.CRIT {
+			isCrit = true
+			attackDamage = int(float64(attacker.ATK) * 1.5) // 1.5x damage on crit
+		}
+	}
+
+	// ✅ UPDATED DAMAGE CALCULATION with CRIT
+	damage := attackDamage - targetTower.DEF
 	if damage < 0 {
 		damage = 0
 	}
@@ -631,7 +695,7 @@ func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, tar
 		TargetType: targetType,
 		TargetName: targetName,
 		Damage:     damage,
-		IsCrit:     false,
+		IsCrit:     isCrit, // ✅ NEW: Include crit info
 		Timestamp:  time.Now(),
 		Data: map[string]interface{}{
 			"target_hp": targetTower.HP,
@@ -865,15 +929,89 @@ func (ge *GameEngine) awardGameEndEXP() {
 
 // endGameByTimeout ends game when time runs out (Enhanced mode)
 func (ge *GameEngine) endGameByTimeout() {
-	if ge.gameState.TowersKilled.Player1 > ge.gameState.TowersKilled.Player2 {
-		ge.gameState.Winner = ge.gameState.Player2.ID
-	} else if ge.gameState.TowersKilled.Player2 > ge.gameState.TowersKilled.Player1 {
-		ge.gameState.Winner = ge.gameState.Player1.ID
-	} else {
-		ge.gameState.Winner = "draw"
+	if !ge.isRunning {
+		return // Game already ended
 	}
 
+	ge.logger.Info("Game ending by timeout - determining winner...")
+
+	// ✅ Count destroyed towers properly
+	player1TowersDestroyed := 0
+	player2TowersDestroyed := 0
+
+	// Count Player1's destroyed towers
+	for _, tower := range ge.gameState.Player1.Towers {
+		if tower.HP <= 0 {
+			player1TowersDestroyed++
+		}
+	}
+
+	// Count Player2's destroyed towers
+	for _, tower := range ge.gameState.Player2.Towers {
+		if tower.HP <= 0 {
+			player2TowersDestroyed++
+		}
+	}
+
+	// Check King Tower status
+	player1KingAlive := false
+	player2KingAlive := false
+
+	for _, tower := range ge.gameState.Player1.Towers {
+		if tower.Name == KingTower && tower.HP > 0 {
+			player1KingAlive = true
+			break
+		}
+	}
+
+	for _, tower := range ge.gameState.Player2.Towers {
+		if tower.Name == KingTower && tower.HP > 0 {
+			player2KingAlive = true
+			break
+		}
+	}
+
+	// ✅ Determine winner
+	if !player1KingAlive && player2KingAlive {
+		ge.gameState.Winner = ge.gameState.Player2.ID
+		ge.logger.Info("Player2 wins - Player1's King Tower destroyed")
+	} else if !player2KingAlive && player1KingAlive {
+		ge.gameState.Winner = ge.gameState.Player1.ID
+		ge.logger.Info("Player1 wins - Player2's King Tower destroyed")
+	} else if !player1KingAlive && !player2KingAlive {
+		ge.gameState.Winner = "draw"
+		ge.logger.Info("Draw - Both King Towers destroyed")
+	} else {
+		// Both King Towers alive - compare tower destruction count
+		if player1TowersDestroyed < player2TowersDestroyed {
+			ge.gameState.Winner = ge.gameState.Player1.ID
+			ge.logger.Info("Player1 wins - lost fewer towers (%d vs %d)", player1TowersDestroyed, player2TowersDestroyed)
+		} else if player2TowersDestroyed < player1TowersDestroyed {
+			ge.gameState.Winner = ge.gameState.Player2.ID
+			ge.logger.Info("Player2 wins - lost fewer towers (%d vs %d)", player2TowersDestroyed, player1TowersDestroyed)
+		} else {
+			ge.gameState.Winner = "draw"
+			ge.logger.Info("Draw - same towers destroyed (%d vs %d)", player1TowersDestroyed, player2TowersDestroyed)
+		}
+	}
+
+	// ✅ Award EXP and end game
 	ge.awardGameEndEXP()
+
+	// ✅ Send game end event
+	gameEndEvent := CombatAction{
+		Type:      "GAME_END",
+		PlayerID:  "",
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"winner":         ge.gameState.Winner,
+			"reason":         "timeout",
+			"player1_towers": player1TowersDestroyed,
+			"player2_towers": player2TowersDestroyed,
+		},
+	}
+	ge.eventChan <- gameEndEvent
+
 	ge.endGame()
 }
 
@@ -914,6 +1052,9 @@ func (ge *GameEngine) manaRegeneration() {
 	for ge.isRunning {
 		select {
 		case <-ticker.C:
+			oldMana1 := ge.gameState.Player1.Mana
+			oldMana2 := ge.gameState.Player2.Mana
+
 			if ge.gameState.Player1.Mana < MaxMana {
 				ge.gameState.Player1.Mana += ManaRegenPerSecond
 				if ge.gameState.Player1.Mana > MaxMana {
@@ -929,6 +1070,28 @@ func (ge *GameEngine) manaRegeneration() {
 			}
 
 			ge.gameState.TimeLeft--
+
+			// Send mana update
+			if oldMana1 != ge.gameState.Player1.Mana || oldMana2 != ge.gameState.Player2.Mana {
+				manaUpdateEvent := CombatAction{
+					Type:      "MANA_UPDATE",
+					PlayerID:  "",
+					Timestamp: time.Now(),
+					Data: map[string]interface{}{
+						"player1_mana": ge.gameState.Player1.Mana,
+						"player2_mana": ge.gameState.Player2.Mana,
+						"time_left":    ge.gameState.TimeLeft,
+					},
+				}
+				ge.eventChan <- manaUpdateEvent
+			}
+
+			// ✅ FIX: Check for game timeout
+			if ge.gameState.TimeLeft <= 0 {
+				ge.logger.Info("Time's up! Ending game by timeout...")
+				go ge.endGameByTimeout() // Use goroutine to prevent blocking
+				return
+			}
 		}
 	}
 }

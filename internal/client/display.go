@@ -108,15 +108,15 @@ func (d *Display) PrintTroopSummoned(player string, troopName string, isPlayer b
 		timestamp, player, troopName)
 }
 
-// PrintAttack displays attack events
+// PrintAttack displays attack events with detailed damage info
 func (d *Display) PrintAttack(attacker, target string, damage int, isCrit bool) {
 	timestamp := time.Now().Format("15:04:05")
 
 	if isCrit {
-		d.critColor.Printf("[%s] [CRIT!] %s landed a CRIT on %s - Damage: %d\n",
+		d.critColor.Printf("[%s] [💥 CRITICAL HIT!] %s → %s: -%d HP (1.5x damage!)\n",
 			timestamp, attacker, target, damage)
 	} else {
-		d.attackColor.Printf("[%s] [DMG LOG] %s attacked %s - Damage dealt: %d\n",
+		d.attackColor.Printf("[%s] [⚔️  ATTACK] %s → %s: -%d HP\n",
 			timestamp, attacker, target, damage)
 	}
 }

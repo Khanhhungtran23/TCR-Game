@@ -102,8 +102,8 @@ func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int, g
 
 		if isPlayable {
 			if gameMode == "enhanced" {
-				ih.display.PrintInfo(fmt.Sprintf("%d. %s (Cost: %d, HP: %d, ATK: %d) ✓",
-					i+1, troop.Name, troop.MANA, troop.HP, troop.ATK))
+				ih.display.PrintInfo(fmt.Sprintf("%d. %s (Cost: %d MANA, HP: %d, ATK: %d, CRIT: %.0f%%) ✓",
+					i+1, troop.Name, troop.MANA, troop.HP, troop.ATK, troop.CRIT*100))
 			} else {
 				ih.display.PrintInfo(fmt.Sprintf("%d. %s (HP: %d, ATK: %d) ✓",
 					i+1, troop.Name, troop.HP, troop.ATK))
@@ -442,5 +442,31 @@ func (ih *InputHandler) GetGameActionWithDebug(gameMode string) string {
 		}
 
 		ih.display.PrintWarning("Invalid action. Please try again.")
+	}
+}
+
+// ✅ NEW: GetEnhancedModeAction gets action with timeout for continuous gameplay
+func (ih *InputHandler) GetEnhancedModeAction() string {
+	// Create a channel to receive input
+	inputChan := make(chan string, 1)
+
+	// Start goroutine to read input
+	go func() {
+		fmt.Print("Enter command (play/info/status/surrender): ")
+		if ih.scanner.Scan() {
+			inputChan <- strings.ToLower(strings.TrimSpace(ih.scanner.Text()))
+		} else {
+			inputChan <- ""
+		}
+	}()
+
+	// Wait for input with timeout
+	select {
+	case input := <-inputChan:
+		return input
+	case <-time.After(2 * time.Second):
+		// Timeout - return empty string to continue game loop
+		fmt.Println() // New line for better formatting
+		return ""
 	}
 }

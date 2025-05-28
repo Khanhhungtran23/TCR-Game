@@ -40,51 +40,51 @@
       },
       "games_played": 0,
       "games_won": 0,
-      "last_login": "2025-05-28T14:52:21.747351+07:00"
+      "last_login": "2025-05-28T22:29:17.07144+07:00"
     },
     {
       "username": "hung",
       "password": "1234",
-      "level": 1,
-      "exp": 0,
+      "level": 7,
+      "exp": 3,
       "troop_levels": {
-        "Bishop": 1,
-        "Knight": 1,
-        "Pawn": 1,
-        "Prince": 1,
-        "Queen": 1,
-        "Rook": 1
+        "Bishop": 7,
+        "Knight": 7,
+        "Pawn": 7,
+        "Prince": 7,
+        "Queen": 7,
+        "Rook": 7
       },
       "tower_levels": {
-        "Guard Tower 1": 1,
-        "Guard Tower 2": 1,
-        "King Tower": 1
+        "Guard Tower 1": 7,
+        "Guard Tower 2": 7,
+        "King Tower": 7
       },
-      "games_played": 0,
-      "games_won": 0,
-      "last_login": "2025-05-28T14:56:55.49896+07:00"
+      "games_played": 22,
+      "games_won": 10,
+      "last_login": "2025-05-28T23:27:29.422046+07:00"
     },
     {
       "username": "baoo",
       "password": "1234",
-      "level": 1,
-      "exp": 0,
+      "level": 4,
+      "exp": 11,
       "troop_levels": {
-        "Bishop": 1,
-        "Knight": 1,
-        "Pawn": 1,
-        "Prince": 1,
-        "Queen": 1,
-        "Rook": 1
+        "Bishop": 4,
+        "Knight": 4,
+        "Pawn": 4,
+        "Prince": 4,
+        "Queen": 4,
+        "Rook": 4
       },
       "tower_levels": {
-        "Guard Tower 1": 1,
-        "Guard Tower 2": 1,
-        "King Tower": 1
+        "Guard Tower 1": 4,
+        "Guard Tower 2": 4,
+        "King Tower": 4
       },
-      "games_played": 0,
-      "games_won": 0,
-      "last_login": "2025-05-28T14:56:59.58638+07:00"
+      "games_played": 22,
+      "games_won": 1,
+      "last_login": "2025-05-28T23:27:55.295996+07:00"
     }
   ]
 }
