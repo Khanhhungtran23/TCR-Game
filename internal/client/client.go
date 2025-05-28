@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"tcr-game/internal/game"
@@ -523,7 +524,7 @@ func (c *Client) handleRegister() error {
 
 // waitForAuth waits for authentication response
 func (c *Client) waitForAuth() error {
-	timeout := time.NewTimer(30 * time.Second)
+	timeout := time.NewTimer(180 * time.Second)
 	defer timeout.Stop()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
@@ -1076,6 +1077,13 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 
 		isMyDestruction := event.PlayerID == c.clientID
 		c.display.PrintTowerDestroyed(destroyer, towerName, owner, isMyDestruction)
+		if isMyDestruction {
+			expGained := 100 // King Tower = 200, Guard Tower = 100
+			if strings.Contains(towerName, "King") {
+				expGained = 200
+			}
+			c.display.PrintEXPGain(expGained, fmt.Sprintf("destroying %s", towerName), true)
+		}
 
 	case "TROOP_DESTROYED":
 		destroyer := event.Data["destroyer"].(string)

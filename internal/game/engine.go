@@ -209,7 +209,6 @@ func (ge *GameEngine) autoAttackSequence(playerID string, troopName TroopType) {
 	if attackAction != nil {
 		ge.broadcastAction(*attackAction)
 
-		// ✅ FIXED: Tower counter-attacks after 2 seconds
 		time.Sleep(2 * time.Second)
 		counterAction := ge.executeCounterAttack(playerID, troopName)
 		if counterAction != nil {
@@ -218,7 +217,9 @@ func (ge *GameEngine) autoAttackSequence(playerID string, troopName TroopType) {
 	}
 
 	time.Sleep(1 * time.Second)
-	ge.autoEndTurn(playerID)
+	if !ge.checkWinConditions() {
+		ge.autoEndTurn(playerID)
+	}
 }
 
 // ✅ FIXED: executeAutoAttack with correct damage calculation
@@ -301,6 +302,18 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	if targetTower.HP == 0 && oldHP > 0 {
 		// ✅ NEW: Award EXP for tower destruction
 		ge.awardEXPForDestruction(playerID, "tower", targetTower.Name)
+
+		expGained := ge.dataManager.CalculateDestructionEXP("tower", targetTower.Name)
+		expAction := CombatAction{
+			Type:      "EXP_GAINED",
+			PlayerID:  playerID,
+			Timestamp: time.Now(),
+			Data: map[string]interface{}{
+				"amount": expGained,
+				"reason": fmt.Sprintf("destroying %s", targetTower.Name),
+			},
+		}
+		ge.broadcastAction(expAction)
 
 		ge.logEvent("TOWER_DESTROYED", "", map[string]interface{}{
 			"destroyer":    player.Username,

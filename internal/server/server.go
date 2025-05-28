@@ -476,7 +476,7 @@ func (s *Server) cleanupInactiveClients() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	timeout := 30 * time.Minute
+	timeout := 100 * time.Minute
 	now := time.Now()
 
 	for clientID, client := range s.clients {

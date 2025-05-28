@@ -147,7 +147,6 @@ func (dm *DataManager) savePlayerDatabase() error {
 
 // Authentication methods
 
-// AuthenticatePlayer verifies user credentials
 func (dm *DataManager) AuthenticatePlayer(username, password string) (*PlayerData, error) {
 	for i := range dm.playerDB.Players {
 		player := &dm.playerDB.Players[i]

@@ -40,7 +40,7 @@
       },
       "games_played": 0,
       "games_won": 0,
-      "last_login": "2025-05-28T13:52:25.278248+07:00"
+      "last_login": "2025-05-28T14:52:21.747351+07:00"
     },
     {
       "username": "hung",
@@ -62,7 +62,29 @@
       },
       "games_played": 0,
       "games_won": 0,
-      "last_login": "2025-05-28T13:52:20.166984+07:00"
+      "last_login": "2025-05-28T14:56:55.49896+07:00"
+    },
+    {
+      "username": "baoo",
+      "password": "1234",
+      "level": 1,
+      "exp": 0,
+      "troop_levels": {
+        "Bishop": 1,
+        "Knight": 1,
+        "Pawn": 1,
+        "Prince": 1,
+        "Queen": 1,
+        "Rook": 1
+      },
+      "tower_levels": {
+        "Guard Tower 1": 1,
+        "Guard Tower 2": 1,
+        "King Tower": 1
+      },
+      "games_played": 0,
+      "games_won": 0,
+      "last_login": "2025-05-28T14:56:59.58638+07:00"
     }
   ]
 }
