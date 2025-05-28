@@ -49,73 +49,43 @@ A text-based implementation of Clash Royale built with Go, featuring TCP network
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd clash-royale-tcr
+   git clone https://github.com/Khanhhungtran23/TCR-Game
+   cd tcr-game
    ```
 
-2. **Setup development environment**
+2. **Run server**
    ```bash
-   make dev-setup
+   go run cmd/server/main.go
    ```
 
-3. **Build the project**
+3. **Build client**
    ```bash
-   make build
+   go run cmd/client/main.go
    ```
-
-### Running the Client (Client-Only Mode)
-
-Since this implementation focuses on the client side, you can run the client in demo mode:
-
-```bash
-# Run client with default settings
-make run-client
-
-# Run with debug logging
-make run-client-debug
-
-# Run with custom server address
-SERVER_ADDR="localhost:8080" make run-client-remote
-```
-
-### Manual Build and Run
-
-```bash
-# Install dependencies
-go mod tidy
-go get github.com/fatih/color@v1.16.0
-
-# Build client
-go build -o bin/tcr-client cmd/client/main.go
-
-# Create data files
-mkdir -p data
-# Copy JSON files from artifacts above
-
-# Run client
-./bin/tcr-client
-```
 
 ## 🎯 Game Mechanics
 
 ### Troops
 
-| Name   | HP  | ATK | DEF | CRIT | MANA | Special                          |
-|--------|-----|-----|-----|------|------|----------------------------------|
-| Pawn   | 50  | 150 | 100 | 10%  | 3    | -                                |
-| Bishop | 100 | 200 | 150 | 10%  | 4    | -                                |
-| Rook   | 250 | 200 | 200 | 10%  | 5    | -                                |
-| Knight | 200 | 300 | 150 | 10%  | 5    | -                                |
-| Prince | 500 | 400 | 300 | 10%  | 6    | -                                |
-| Queen  | -   | -   | -   | 10%  | 5    | Heals lowest HP tower by 300     |
+### Troops
+
+| Name   | HP  | ATK | DEF | CRIT | MANA | EXP | Special                                      |
+|--------|-----|-----|-----|------|------|-----|----------------------------------------------|
+| Pawn   | 150 | 180 |  80 | 10%  | 3    | 10  | -                                            |
+| Bishop | 250 | 220 | 100 | 10%  | 4    | 15  | -                                            |
+| Rook   | 300 | 280 | 200 | 10%  | 5    | 25  | -                                            |
+| Knight | 350 | 320 | 150 | 10%  | 5    | 25  | -                                            |
+| Prince | 500 | 400 | 300 | 10%  | 6    | 50  | -                                            |
+| Queen  | 0   | 0   | 0   | 10%  | 5    | 30  | Heals the friendly tower with lowest HP by 300 |
 
 
 ### Towers
 
-| Type        | HP   | ATK | DEF | CRIT |
-|-------------|------|-----|-----|------|
-| King Tower  | 2000 | 500 | 300 | 10%  |
-| Guard Tower | 1000 | 300 | 100 | 5%   |
+| Type         | HP   | ATK | DEF | CRIT | EXP |
+|--------------|------|-----|-----|------|-----|
+| King Tower   | 1500 | 400 | 200 | 10%  | 200 |
+| Guard Tower 1|  800 | 250 | 150 | 5%   | 100 |
+| Guard Tower 2|  800 | 250 | 150 | 5%   | 100 |
 
 ### Combat Rules
 
@@ -171,7 +141,7 @@ The client features colored terminal output:
 ## 🔧 Command Line Options
 
 ```bash
-./tcr-client [OPTIONS]
+./tcr-game [OPTIONS]
 
 Options:
   -server string      Server address (default "localhost:8080")
@@ -185,16 +155,16 @@ Options:
 
 ```bash
 # Connect to specific server
-./tcr-client -server "192.168.1.100:8080"
+./tcr-game -server "192.168.1.100:8080"
 
 # Debug mode
-./tcr-client -log-level DEBUG
+./tcr-game -log-level DEBUG
 
 # Custom log file
-./tcr-client -log-file ./my-game.log
+./tcr-game -log-file ./my-game.log
 
 # Remote server with debug
-./tcr-client -server "game.example.com:8080" -log-level DEBUG
+./tcr-game -server "game.example.com:8080" -log-level DEBUG
 ```
 
 ## 📁 Data Persistence
@@ -206,21 +176,6 @@ Player data is stored in JSON format:
 - **`data/towers.json`**: Tower specifications
 
 All data is automatically created on first run.
-
-## 🛠️ Development
-
-### Available Make Commands
-
-```bash
-make help           # Show all available commands
-make dev            # Full development setup
-make build          # Build client and server
-make client         # Build client only
-make test           # Run tests
-make clean          # Clean build artifacts
-make fmt            # Format code
-make release        # Create release package
-```
 
 ### Code Structure
 
@@ -257,36 +212,6 @@ This implementation fulfills all project requirements:
 - ✅ **TCP Networking**: Client-server communication
 - ✅ **Authentication**: Username/password system
 
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Connection Failed**
-   ```bash
-   # Check if server is running and address is correct
-   ./tcr-client -server "localhost:8080"
-   ```
-
-2. **Permission Denied (Logs)**
-   ```bash
-   # Create logs directory manually
-   mkdir -p logs
-   chmod 755 logs
-   ```
-
-3. **JSON Parse Error**
-   ```bash
-   # Reset data files
-   make setup-data
-   ```
-
-4. **Build Errors**
-   ```bash
-   # Clean and rebuild
-   make clean
-   make deps
-   make build
-   ```
 
 ## 📈 Future Enhancements
 
@@ -300,7 +225,7 @@ This implementation fulfills all project requirements:
 
 ## 📄 License
 
-This project is created for educational purposes as part of the Network Programming course (IT096IU).
+This project is created for educational purposes as part of the Net Centric course (IT096IU).
 
 ## 👥 Contributing
 
@@ -308,4 +233,4 @@ This is an academic project. For improvements or bug fixes, please follow standa
 
 ---
 
-**Built with ❤️ in Go for IT096IU Network Centric Course**
+**Built with ❤️ in Go for IT096IU Net Centric Course**
