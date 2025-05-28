@@ -10,9 +10,7 @@ import (
 	"tcr-game/internal/game"
 )
 
-// Display handles all visual output for the client
 type Display struct {
-	// Color functions for different types of output
 	serverColor  *color.Color
 	connectColor *color.Color
 	gameColor    *color.Color
@@ -25,7 +23,7 @@ type Display struct {
 	infoColor    *color.Color
 	playerColor  *color.Color
 	enemyColor   *color.Color
-	expColor     *color.Color // ✅ NEW: Color for EXP messages
+	expColor     *color.Color
 }
 
 // NewDisplay creates a new display instance with configured colors
@@ -43,7 +41,7 @@ func NewDisplay() *Display {
 		infoColor:    color.New(color.FgWhite),
 		playerColor:  color.New(color.FgCyan),
 		enemyColor:   color.New(color.FgMagenta),
-		expColor:     color.New(color.FgGreen, color.Bold), // ✅ NEW: Green bold for EXP
+		expColor:     color.New(color.FgGreen, color.Bold),
 	}
 }
 
@@ -121,7 +119,6 @@ func (d *Display) PrintAttack(attacker, target string, damage int, isCrit bool) 
 	}
 }
 
-// ✅ NEW: PrintCounterAttack displays tower counter-attacks
 func (d *Display) PrintCounterAttack(attacker, target string, damage int) {
 	timestamp := time.Now().Format("15:04:05")
 	d.warningColor.Printf("[%s] [COUNTER] %s strikes back at %s - Damage: %d\n",
@@ -135,7 +132,6 @@ func (d *Display) PrintHeal(healer, target string, amount int) {
 		timestamp, healer, target, amount)
 }
 
-// ✅ UPDATED: PrintGameEnd with detailed EXP display
 func (d *Display) PrintGameEnd(winner string, isPlayerWinner bool, towersDestroyed map[string]int) {
 	d.infoColor.Println("\n[GAME ENDED]")
 
@@ -156,7 +152,6 @@ func (d *Display) PrintGameEnd(winner string, isPlayerWinner bool, towersDestroy
 	}
 }
 
-// ✅ UPDATED: PrintExperience with detailed breakdown
 func (d *Display) PrintExperience(playerExp, opponentExp int) {
 	d.expColor.Printf("═══════════════ EXPERIENCE GAINED ═══════════════\n")
 	d.expColor.Printf("🌟 YOU: +%d EXP\n", playerExp)
@@ -164,7 +159,6 @@ func (d *Display) PrintExperience(playerExp, opponentExp int) {
 	d.expColor.Printf("═══════════════════════════════════════════════════\n")
 }
 
-// ✅ NEW: PrintEXPGain for individual EXP gains during battle
 func (d *Display) PrintEXPGain(amount int, reason string, isPlayer bool) {
 	timestamp := time.Now().Format("15:04:05")
 	if isPlayer {
@@ -174,7 +168,6 @@ func (d *Display) PrintEXPGain(amount int, reason string, isPlayer bool) {
 	}
 }
 
-// ✅ NEW: PrintLevelUp notification
 func (d *Display) PrintLevelUp(newLevel int, isPlayer bool) {
 	timestamp := time.Now().Format("15:04:05")
 	if isPlayer {
@@ -302,7 +295,6 @@ func (d *Display) PrintTroopDestroyed(destroyerName, troopName, ownerName string
 	}
 }
 
-// ✅ NEW: PrintSurrenderResult displays surrender outcome
 func (d *Display) PrintSurrenderResult(winner string, isPlayerWinner bool) {
 	d.PrintSeparator()
 	if isPlayerWinner {

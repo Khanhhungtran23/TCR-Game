@@ -21,24 +21,10 @@ var (
 	dataDir   = flag.String("data-dir", "data", "Data directory path")
 	logLevel  = flag.String("log-level", "INFO", "Log level (DEBUG, INFO, WARN, ERROR)")
 	logFile   = flag.String("log-file", "", "Log file path (optional)")
-	help      = flag.Bool("help", false, "Show help information")
-	ver       = flag.Bool("version", false, "Show version information")
 )
 
 func main() {
 	flag.Parse()
-
-	// Show help
-	if *help {
-		showHelp()
-		return
-	}
-
-	// Show version
-	if *ver {
-		showVersion()
-		return
-	}
 
 	// Initialize logging
 	if err := initLogging(); err != nil {
@@ -117,95 +103,4 @@ func setupGracefulShutdown(gameServer *server.Server) {
 		gameServer.Stop()
 		os.Exit(0)
 	}()
-}
-
-// showHelp displays help information
-func showHelp() {
-	fmt.Printf(`Clash Royale TCR Server v%s
-
-USAGE:
-    %s [OPTIONS]
-
-OPTIONS:
-    -port string         Server port (default "8080")
-    -host string         Server host (default "localhost")
-    -data-dir string     Data directory path (default "./data")
-    -log-level string    Set log level (DEBUG, INFO, WARN, ERROR) (default "INFO")
-    -log-file string     Set log file path (optional)
-    -help               Show this help message
-    -version            Show version information
-
-EXAMPLES:
-    # Start server with default settings
-    %s
-
-    # Start on specific port
-    %s -port 9000
-
-    # Start on all interfaces
-    %s -host 0.0.0.0 -port 8080
-
-    # Start with debug logging
-    %s -log-level DEBUG
-
-    # Start with custom data directory
-    %s -data-dir /var/game/data
-
-    # Production setup
-    %s -host 0.0.0.0 -port 8080 -log-level WARN -log-file /var/log/tcr-server.log
-
-SERVER FEATURES:
-    - TCP socket server for client connections
-    - Player authentication and registration
-    - Real-time matchmaking system
-    - Game state management for multiple concurrent games
-    - JSON-based data persistence
-    - Comprehensive logging and monitoring
-
-GAME MODES:
-    Simple TCR:
-    - Turn-based gameplay
-    - Players take turns summoning troops
-    - Must destroy Guard Towers before King Tower
-
-    Enhanced TCR:
-    - Real-time gameplay (3 minutes)
-    - Continuous mana regeneration
-    - Critical hit system
-    - Time-based win conditions
-
-NETWORK PROTOCOL:
-    - TCP-based client-server communication
-    - JSON message format
-    - Real-time event broadcasting
-    - Connection health monitoring
-
-ADMINISTRATION:
-    - Player data stored in JSON files
-    - Game specifications configurable via JSON
-    - Automatic cleanup of inactive connections
-    - Graceful shutdown handling
-
-For more information, visit: https://github.com/yourusername/clash-royale-tcr
-`, version, os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0], os.Args[0])
-}
-
-// showVersion displays version information
-func showVersion() {
-	fmt.Printf(`Clash Royale TCR Server
-Version: %s
-Build Time: %s
-Go Version: go1.21+
-Platform: linux/amd64
-
-Server Features:
-- TCP networking with clients
-- Real-time and turn-based gameplay modes
-- JSON-based data persistence
-- Player authentication system
-- Matchmaking and game management
-- Comprehensive logging system
-
-Copyright (c) 2024 Clash Royale TCR Team
-`, version, buildTime)
 }

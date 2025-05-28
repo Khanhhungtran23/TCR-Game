@@ -445,7 +445,6 @@ func (ih *InputHandler) GetGameActionWithDebug(gameMode string) string {
 	}
 }
 
-// ✅ NEW: GetEnhancedModeAction gets action with timeout for continuous gameplay
 func (ih *InputHandler) GetEnhancedModeAction() string {
 	// Create a channel to receive input
 	inputChan := make(chan string, 1)

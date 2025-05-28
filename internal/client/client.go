@@ -17,22 +17,21 @@ import (
 
 // Client represents the game client
 type Client struct {
-	conn            net.Conn
-	display         *Display
-	input           *InputHandler
-	player          *game.PlayerData
-	gameState       *game.GameState
-	myTroops        []game.Troop
-	myTowers        []game.Tower
-	isConnected     bool
-	isInGame        bool
-	waitingForMatch bool
-	logger          *logger.Logger
-	writer          *bufio.Writer
-	reader          *bufio.Scanner
-	serverAddr      string
-	clientID        string
-	// ✅ UPDATED: Better troop deployment tracking
+	conn               net.Conn
+	display            *Display
+	input              *InputHandler
+	player             *game.PlayerData
+	gameState          *game.GameState
+	myTroops           []game.Troop
+	myTowers           []game.Tower
+	isConnected        bool
+	isInGame           bool
+	waitingForMatch    bool
+	logger             *logger.Logger
+	writer             *bufio.Writer
+	reader             *bufio.Scanner
+	serverAddr         string
+	clientID           string
 	deployedTroops     map[string]bool // Track which troops have been deployed
 	troopAttackCount   map[string]int  // Track attacks per troop per turn
 	deployedThisTurn   []string        // Only troops deployed THIS turn
@@ -59,7 +58,6 @@ func NewClient(serverAddr string) *Client {
 func (c *Client) handleGameEnd(msg *network.Message) error {
 	c.logger.Debug("🎯 Received GAME_END message")
 
-	// ✅ CRITICAL: Set flags to exit game immediately
 	c.isInGame = false
 	c.waitingForMatch = false
 
@@ -88,7 +86,6 @@ func (c *Client) handleGameEnd(msg *network.Message) error {
 	isWinner := winner == c.clientID || winner == c.player.Username
 	isDraw := winner == "draw"
 
-	// ✅ CLEAR: Clear game state
 	c.gameState = nil
 	c.myTroops = nil
 	c.myTowers = nil
@@ -146,7 +143,6 @@ func (c *Client) handleTurnChange(msg *network.Message) error {
 	oldTurn := c.gameState.CurrentTurn
 	c.gameState.CurrentTurn = currentTurn
 
-	// ✅ RESET: Only reset turn-specific counters when my turn starts
 	if c.gameState.GameMode == game.ModeSimple && currentTurn == c.clientID {
 		c.deployedThisTurn = []string{}
 		c.troopAttackCount = make(map[string]int)
@@ -198,12 +194,10 @@ func (c *Client) sendMessage(msg *network.Message) error {
 		return fmt.Errorf("failed to serialize message: %w", err)
 	}
 
-	// ✅ FIX: Check connection before writing
 	if c.writer == nil {
 		return fmt.Errorf("connection lost")
 	}
 
-	// ✅ FIX: Write with retry mechanism
 	maxRetries := 3
 	for i := 0; i < maxRetries; i++ {
 		_, err = c.writer.Write(append(data, '\n'))
@@ -220,7 +214,6 @@ func (c *Client) sendMessage(msg *network.Message) error {
 		}
 	}
 
-	// ✅ Mark as disconnected if all retries failed
 	c.isConnected = false
 	return fmt.Errorf("failed to send message after %d retries: %w", maxRetries, err)
 }
@@ -260,7 +253,6 @@ func (c *Client) showGameStatus() {
 		}
 		c.display.PrintInfo(fmt.Sprintf("Your Mana: %d/%d", myMana, game.MaxMana))
 
-		// ✅ NEW: Show mana regeneration info
 		c.display.PrintInfo("Mana regenerates +1 every second")
 	}
 
@@ -294,7 +286,6 @@ func (c *Client) showDetailedGameInfo() {
 			c.display.PrintInfo(fmt.Sprintf("Deployed: %v", c.deployedThisTurn))
 		}
 	} else if c.gameState.GameMode == game.ModeEnhanced {
-		// ✅ NEW: Show mana and time for Enhanced mode
 		var myMana int
 		if c.gameState.Player1.ID == c.clientID {
 			myMana = c.gameState.Player1.Mana
@@ -344,7 +335,6 @@ func (c *Client) showDetailedGameInfo() {
 		status := ""
 
 		if c.gameState.GameMode == game.ModeEnhanced {
-			// ✅ NEW: Show mana cost and alive status for Enhanced mode
 			if troop.HP > 0 {
 				status = fmt.Sprintf(" [ALIVE - Cost: %d MANA]", troop.MANA)
 			} else {
@@ -390,7 +380,6 @@ func (c *Client) getPlayerName(playerID string) string {
 	return "Unknown"
 }
 
-// ✅ UPDATED: Enhanced debug function with attack tracking
 func (c *Client) debugGameState() {
 	if c.gameState == nil {
 		c.display.PrintError("No game state available")
@@ -405,7 +394,6 @@ func (c *Client) debugGameState() {
 	c.display.PrintInfo(fmt.Sprintf("  My Client ID: %s", c.clientID))
 	c.display.PrintInfo(fmt.Sprintf("  Is My Turn: %t", c.gameState.CurrentTurn == c.clientID))
 
-	// ✅ DEPLOYMENT AND ATTACK TRACKING
 	c.display.PrintInfo("\n📦 DEPLOYMENT & ATTACK STATUS:")
 	c.display.PrintInfo(fmt.Sprintf("  Deployed Troops: %v", c.deployedTroops))
 	c.display.PrintInfo(fmt.Sprintf("  Deployed This Turn: %v", c.deployedThisTurn))
@@ -425,7 +413,6 @@ func (c *Client) debugGameState() {
 	}
 	c.display.PrintInfo(fmt.Sprintf("  Available Attackers: %d", availableAttackers))
 
-	// ✅ ACTION RECOMMENDATIONS
 	c.display.PrintInfo("\n💡 RECOMMENDATIONS:")
 	if c.gameState.CurrentTurn != c.clientID {
 		c.display.PrintInfo("  - Wait for your turn")
@@ -617,7 +604,6 @@ func (c *Client) waitForAuth() error {
 // runMainLoop handles the main game menu
 func (c *Client) runMainLoop() error {
 	for {
-		// ✅ FIX: Clean up game state if game ended
 		if !c.isInGame && c.gameState != nil {
 			c.gameState = nil
 			c.myTroops = nil
@@ -631,7 +617,6 @@ func (c *Client) runMainLoop() error {
 				c.isInGame = false
 				continue
 			}
-			// ✅ After gameplay ends, continue to main menu
 			continue
 		}
 
@@ -667,7 +652,6 @@ func (c *Client) runMainLoop() error {
 	}
 }
 
-// ✅ NEW: Reset game tracking variables
 func (c *Client) resetGameTracking() {
 	c.deployedTroops = make(map[string]bool)
 	c.troopAttackCount = make(map[string]int)
@@ -689,8 +673,6 @@ func (c *Client) findMatch(gameMode string) {
 	c.waitingForMatch = true
 }
 
-// handleGameplay manages in-game interactions
-// handleGameplay manages in-game interactions
 func (c *Client) handleGameplay() error {
 	if c.gameState == nil {
 		return fmt.Errorf("no active game state")
@@ -703,7 +685,6 @@ func (c *Client) handleGameplay() error {
 			return nil
 		}
 
-		// ✅ ENHANCED MODE: Different handling
 		if c.gameState.GameMode == game.ModeEnhanced {
 			return c.handleEnhancedGameplay()
 		}
@@ -777,7 +758,6 @@ func (c *Client) handleEnhancedGameplay() error {
 	c.showEnhancedModeStatus()
 
 	for c.isInGame && c.gameState != nil {
-		// ✅ FIX: Check if game ended during loop
 		if !c.isInGame || c.gameState == nil {
 			c.display.PrintInfo("🎮 Game ended. Returning to main menu...")
 			break
@@ -791,7 +771,6 @@ func (c *Client) handleEnhancedGameplay() error {
 
 		choice := c.input.GetMenuChoice(1, 4)
 
-		// ✅ FIX: Check game status before processing choice
 		if !c.isInGame || c.gameState == nil {
 			c.display.PrintInfo("🎮 Game ended during input. Returning to main menu...")
 			break
@@ -819,7 +798,6 @@ func (c *Client) handleEnhancedGameplay() error {
 			c.display.PrintSeparator()
 
 			for i := 10; i > 0; i-- {
-				// ✅ FIX: Check game status during wait
 				if !c.isInGame || c.gameState == nil {
 					c.display.PrintInfo("🎮 Game ended during observation.")
 					return nil
@@ -846,7 +824,6 @@ func (c *Client) handleEnhancedGameplay() error {
 	return nil
 }
 
-// ✅ IMPROVED: startCombatForAllTroops only attacks with alive troops
 func (c *Client) startCombatForAllTroops() {
 	if c.gameState == nil || c.gameState.GameMode != game.ModeEnhanced {
 		return
@@ -854,7 +831,6 @@ func (c *Client) startCombatForAllTroops() {
 
 	c.display.PrintInfo("🚀 Initiating combat with all deployed troops...")
 
-	// ✅ Sync troops first to get latest HP
 	c.syncLocalTroopsFromGameState()
 
 	// Find all alive troops and start attacking
@@ -867,7 +843,6 @@ func (c *Client) startCombatForAllTroops() {
 			if target != "" {
 				c.display.PrintInfo(fmt.Sprintf("⚔️  %s attacking %s", troop.Name, target))
 
-				// ✅ DELAY: Wait a bit to ensure server processed deployment
 				go func(troopName game.TroopType, targetName string) {
 					time.Sleep(500 * time.Millisecond) // Wait for server sync
 
@@ -889,7 +864,6 @@ func (c *Client) startCombatForAllTroops() {
 	c.display.PrintInfo(fmt.Sprintf("⚡ %d troops entering combat!", aliveTroops))
 }
 
-// ✅ NEW: findBestTarget finds the best tower to attack based on priority
 func (c *Client) findBestTarget() string {
 	if c.gameState == nil {
 		return ""
@@ -920,7 +894,6 @@ func (c *Client) findBestTarget() string {
 	return "" // No targets available
 }
 
-// ✅ NEW: showCombatDetails shows what's happening in combat
 func (c *Client) showCombatDetails() {
 	if c.gameState == nil {
 		return
@@ -1002,11 +975,9 @@ func (c *Client) showEnhancedModeStatus() {
 		myMana = c.gameState.Player2.Mana
 	}
 
-	// ✅ Real-time display with better formatting
 	minutes := c.gameState.TimeLeft / 60
 	seconds := c.gameState.TimeLeft % 60
 
-	// ✅ Show which tower is being targeted
 	targetInfo := c.getCurrentTargetInfo()
 
 	c.display.PrintInfo(fmt.Sprintf("⚡ Mana: %d/%d | ⏰ Time: %d:%02d | 🎯 Target: %s",
@@ -1025,7 +996,6 @@ func (c *Client) showEnhancedModeStatus() {
 	c.display.PrintInfo(fmt.Sprintf("⚔️  Active Troops: %d/3", aliveTroops))
 }
 
-// ✅ NEW: getCurrentTargetInfo shows what towers are being targeted
 func (c *Client) getCurrentTargetInfo() string {
 	if c.gameState == nil {
 		return "Unknown"
@@ -1067,11 +1037,9 @@ func (c *Client) getCurrentTargetInfo() string {
 	}
 }
 
-// ✅ UPDATED: handleAttack with better troop tracking
 func (c *Client) handleAttack() error {
 	c.syncLocalTroopsFromGameState()
 
-	// ✅ IMPROVED: Show available troops for attack with better filtering
 	var availableTroops []game.Troop
 
 	if c.gameState.GameMode == game.ModeSimple {
@@ -1134,7 +1102,6 @@ func (c *Client) handleAttack() error {
 		return nil
 	}
 
-	// ✅ UPDATE: Track attack count
 	troopName := string(selectedTroop.Name)
 	c.troopAttackCount[troopName]++
 
@@ -1173,7 +1140,6 @@ func (c *Client) handlePlayCard() error {
 	selectedTroop := c.myTroops[troopIndex]
 	troopName := string(selectedTroop.Name)
 
-	// ✅ TRACK: Mark troop as deployed for Simple mode
 	if c.gameState.GameMode == game.ModeSimple {
 		c.deployedThisTurn = append(c.deployedThisTurn, troopName)
 		c.deployedTroops[troopName] = true
@@ -1183,7 +1149,6 @@ func (c *Client) handlePlayCard() error {
 		}
 		c.troopAttackCount[troopName] = 0
 	} else if c.gameState.GameMode == game.ModeEnhanced {
-		// ✅ UPDATE: Immediately deduct mana locally for responsive UI
 		if c.gameState.Player1.ID == c.clientID {
 			c.gameState.Player1.Mana -= selectedTroop.MANA
 		} else {
@@ -1203,7 +1168,6 @@ func (c *Client) handlePlayCard() error {
 	msg := network.CreateSummonMessage(c.clientID, c.gameState.ID, selectedTroop.Name)
 	err = c.sendMessage(msg)
 
-	// ✅ FIX: Immediately revive troop locally for Enhanced mode
 	if err == nil && c.gameState.GameMode == game.ModeEnhanced {
 		// Calculate full HP (same formula as server)
 		level := selectedTroop.Level
@@ -1321,8 +1285,7 @@ func (c *Client) processServerMessage(data []byte) error {
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	c.logger.Debug("📨 Received message type: %s", msg.Type) // ✅ ADD: Debug all messages
-
+	c.logger.Debug("📨 Received message type: %s", msg.Type)
 	switch msg.Type {
 	case network.MsgAuthOK:
 		return c.handleAuthSuccess(msg)
@@ -1335,7 +1298,7 @@ func (c *Client) processServerMessage(data []byte) error {
 	case network.MsgGameEvent:
 		return c.handleGameEvent(msg)
 	case network.MsgGameEnd:
-		c.logger.Debug("🎯 Processing GAME_END message") // ✅ ADD: Specific debug
+		c.logger.Debug("🎯 Processing GAME_END message")
 		return c.handleGameEnd(msg)
 	case network.MsgTurnChange:
 		return c.handleTurnChange(msg)
@@ -1352,14 +1315,12 @@ func (c *Client) processServerMessage(data []byte) error {
 	return nil
 }
 
-// ✅ NEW: handleManaUpdateMessage processes mana updates from server
 func (c *Client) handleManaUpdateMessage(msg *network.Message) error {
 	manaData, ok := msg.Data["mana_update"].(map[string]interface{})
 	if !ok {
 		return fmt.Errorf("invalid mana update format")
 	}
 
-	// ✅ CRITICAL: Update time left
 	if timeLeft, ok := manaData["time_left"].(float64); ok {
 		c.gameState.TimeLeft = int(timeLeft)
 	}
@@ -1373,7 +1334,6 @@ func (c *Client) handleManaUpdateMessage(msg *network.Message) error {
 	return nil
 }
 
-// ✅ NEW: handleManaUpdate processes mana regeneration updates
 func (c *Client) handleManaUpdate(msg *network.Message) error {
 	manaData, ok := msg.Data["mana_update"].(map[string]interface{})
 	if !ok {
@@ -1479,7 +1439,6 @@ func (c *Client) handleGameStart(msg *network.Message) error {
 	c.isInGame = true
 	c.waitingForMatch = false
 
-	// ✅ NEW: Start real-time timer for Enhanced mode
 	if c.gameState.GameMode == game.ModeEnhanced {
 		c.startRealTimeTimer()
 	}
@@ -1527,13 +1486,11 @@ func (c *Client) syncLocalTroopsFromGameState() {
 		serverTroops = c.gameState.Player2.Troops
 	}
 
-	// ✅ IMPROVED: Full sync of troop stats
 	for i := range c.myTroops {
 		for j := range serverTroops {
 			if c.myTroops[i].Name == serverTroops[j].Name {
 				oldHP := c.myTroops[i].HP
 
-				// ✅ Sync all stats, not just HP
 				c.myTroops[i].HP = serverTroops[j].HP
 				c.myTroops[i].MaxHP = serverTroops[j].MaxHP
 				c.myTroops[i].ATK = serverTroops[j].ATK
@@ -1549,7 +1506,6 @@ func (c *Client) syncLocalTroopsFromGameState() {
 	}
 }
 
-// ✅ UPDATED: displayGameEvent with current HP display
 func (c *Client) displayGameEvent(event game.CombatAction) {
 	isMyAction := event.PlayerID == c.clientID
 
@@ -1563,13 +1519,11 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 		attacker := string(event.TroopName)
 		target := event.TargetName
 
-		// ✅ CHECK: If this is a counter-attack
 		isCounter := false
 		if data, ok := event.Data["is_counter"]; ok {
 			isCounter, _ = data.(bool)
 		}
 
-		// ✅ NEW: Get current HP after attack
 		currentHP := 0
 		if targetHP, ok := event.Data["target_hp"].(float64); ok {
 			currentHP = int(targetHP)
@@ -1581,7 +1535,6 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 			c.display.PrintAttack(attacker, target, event.Damage, event.IsCrit)
 		}
 
-		// ✅ NEW: Show current HP status
 		c.display.PrintInfo(fmt.Sprintf("   └─ %s now has %d HP remaining", target, currentHP))
 
 	case game.ActionHeal:

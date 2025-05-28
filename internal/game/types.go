@@ -137,23 +137,17 @@ const (
 	MaxMana             = 10
 	ManaRegenPerSecond  = 1
 
-	// ✅ UPDATED: EXP rewards
 	WinEXP  = 50 // EXP for winning
 	LoseEXP = 10 // EXP for losing
 	DrawEXP = 25 // EXP for draw
 
-	// ✅ NEW: Bonus EXP for actions
 	TowerDestroyEXP = 100 // Extra EXP for destroying towers
 	TroopKillEXP    = 20  // Extra EXP for killing troops
 	DamageEXPRatio  = 50  // 1 EXP per 50 damage dealt
 
-	// ✅ UPDATED: Scaling factors for better balance
 	StatScalePerLevel = 0.10 // 10% increase per level
 	EXPScalePerLevel  = 0.15 // 15% increase in required EXP per level
 	BaseEXPRequired   = 100  // Base EXP needed for level 2
-
-	// Targeting rules for Simple TCR
-	// Must destroy at least one Guard Tower before attacking King Tower
 
 	// Number of troops and towers
 	TroopsPerPlayer = 3

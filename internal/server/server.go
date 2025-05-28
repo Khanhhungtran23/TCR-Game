@@ -312,7 +312,6 @@ func (s *Server) handleAttack(client *Client, msg *network.Message) error {
 }
 
 // handleEndTurn processes end turn actions (Simple mode)
-// handleEndTurn processes end turn actions (Simple mode)
 func (s *Server) handleEndTurn(client *Client, msg *network.Message) error {
 	gameEngine := s.getClientGame(client)
 	if gameEngine == nil {
@@ -461,7 +460,6 @@ func (s *Server) removeClient(clientID string) {
 	defer s.mu.Unlock()
 
 	if client, exists := s.clients[clientID]; exists {
-		// ✅ XỬ LÝ DISCONNECT TRONG GAME
 		if client.GameID != "" {
 			// Thông báo opponent win
 			s.handlePlayerDisconnect(client.GameID, clientID)
@@ -523,7 +521,6 @@ func (s *Server) endGame(gameID string, reason string) error {
 		return fmt.Errorf("clients not found")
 	}
 
-	// ✅ Calculate EXP based on winner
 	var player1EXP, player2EXP int
 
 	if gameState.Winner == "draw" {
@@ -539,7 +536,6 @@ func (s *Server) endGame(gameID string, reason string) error {
 
 	s.logger.Info("📊 EXP calculated - Player1: %d, Player2: %d", player1EXP, player2EXP)
 
-	// ✅ Send notifications to BOTH clients
 	if client1 != nil {
 		isWinner := gameState.Winner == client1.ID
 		s.logger.Info("📤 Sending game end to %s (winner: %t)", client1.Username, isWinner)
@@ -572,7 +568,6 @@ func (s *Server) sendGameEndNotification(client *Client, won bool, expGained str
 		return fmt.Errorf("client is nil")
 	}
 
-	// ✅ DEBUG: Log what we're sending
 	s.logger.Debug("📤 Sending game end to %s: won=%t, exp=%s, reason=%s",
 		client.Username, won, expGained, reason)
 
@@ -596,7 +591,6 @@ func (s *Server) sendGameEndNotification(client *Client, won bool, expGained str
 		"opponent_exp_gained": fmt.Sprintf("%d", opponentExp),
 	}
 
-	// ✅ DEBUG: Log the exact data being sent
 	s.logger.Debug("📤 Game end data: %+v", gameEndData)
 
 	msg.SetData("game_end", gameEndData)
@@ -699,14 +693,12 @@ func (s *Server) createMatch(client1, client2 *Client, gameMode string) {
 	client2.GameID = gameID
 	s.mu.Unlock()
 
-	// 🔥 ADD THIS: Notify players of match found
 	s.notifyMatchFound(client1, client2, gameID, gameMode)
 
 	// Start game
 	gameEngine.StartGame()
 	go s.handleGameEvents(gameEngine)
 
-	// 🔥 ADD THIS: Send game start data
 	s.sendGameStart(client1, client2, gameEngine)
 
 	s.logger.Info("Match created: %s vs %s in %s mode", client1.Username, client2.Username, gameMode)
@@ -721,7 +713,6 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 		case event := <-eventChan:
 			gameState := gameEngine.GetGameState()
 
-			// ✅ Handle MANA_UPDATE separately
 			if event.Type == "MANA_UPDATE" {
 				player1Mana, _ := event.Data["player1_mana"].(int)
 				player2Mana, _ := event.Data["player2_mana"].(int)
@@ -731,7 +722,6 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 				continue
 			}
 
-			// ✅ Handle GAME_END events
 			if event.Type == "GAME_END" {
 				s.logger.Info("🎯 Received GAME_END event from engine")
 				reason, _ := event.Data["reason"].(string)
@@ -739,12 +729,10 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 					reason = "unknown"
 				}
 
-				// ✅ Call endGame to send notifications
 				s.endGame(gameState.ID, reason)
 				return // Exit the event handler
 			}
 
-			// Broadcast other events
 			s.broadcastGameEvent(gameState.ID, event, *gameState)
 
 			// Handle special events
@@ -760,7 +748,6 @@ func (s *Server) handleGameEvents(gameEngine *game.GameEngine) {
 			}
 
 		case <-time.After(100 * time.Millisecond):
-			// ✅ Check if game should timeout (backup check)
 			if gameEngine.GetGameState().TimeLeft <= 0 && gameEngine.IsRunning() {
 				s.logger.Info("🚨 Backup timeout detected, forcing game end...")
 				s.endGame(gameEngine.GetGameState().ID, "timeout")

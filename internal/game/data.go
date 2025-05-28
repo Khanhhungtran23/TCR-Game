@@ -231,7 +231,6 @@ func (dm *DataManager) UpdatePlayerData(username string, expGained int, won bool
 	return fmt.Errorf("player not found")
 }
 
-// ✅ IMPROVED: checkLevelUp with better progression system
 func (dm *DataManager) checkLevelUp(player *PlayerData) bool {
 	leveledUp := false
 
@@ -247,7 +246,6 @@ func (dm *DataManager) checkLevelUp(player *PlayerData) bool {
 		player.EXP -= requiredEXP
 		leveledUp = true
 
-		// ✅ IMPROVED: Level up all troops and towers (10% stat increase)
 		for troopType := range player.TroopLevels {
 			player.TroopLevels[troopType] = player.Level
 		}
@@ -262,7 +260,6 @@ func (dm *DataManager) checkLevelUp(player *PlayerData) bool {
 	return leveledUp
 }
 
-// ✅ UPDATED: calculateRequiredEXP with better scaling
 func (dm *DataManager) calculateRequiredEXP(level int) int {
 	// Base EXP for level 2 is 100
 	// Each level requires 15% more EXP than previous level
@@ -283,7 +280,6 @@ func (dm *DataManager) calculateRequiredEXP(level int) int {
 	return int(baseEXP)
 }
 
-// CreatePlayerForGame creates a Player instance for gameplay from PlayerData
 func (dm *DataManager) CreatePlayerForGame(playerData *PlayerData, playerID string) *Player {
 	player := &Player{
 		ID:       playerID,
@@ -385,7 +381,6 @@ func (dm *DataManager) generateTowers(playerData *PlayerData) []Tower {
 	return towers
 }
 
-// ✅ IMPROVED: scaleStatByLevel with proper 10% scaling per level
 func (dm *DataManager) scaleStatByLevel(baseStat, level int) int {
 	if baseStat == 0 { // Handle special troops like Queen
 		return 0
@@ -418,7 +413,6 @@ func (dm *DataManager) GetPlayerByUsername(username string) *PlayerData {
 	return nil
 }
 
-// ✅ NEW: CalculateGameEndEXP determines EXP rewards for game end
 func (dm *DataManager) CalculateGameEndEXP(won bool, isDraw bool) int {
 	if isDraw {
 		return DrawEXP
@@ -429,7 +423,6 @@ func (dm *DataManager) CalculateGameEndEXP(won bool, isDraw bool) int {
 	}
 }
 
-// ✅ NEW: CalculateDamageEXP determines EXP for dealing damage
 func (dm *DataManager) CalculateDamageEXP(damage int) int {
 	expGained := damage / DamageEXPRatio
 	if expGained < 1 {
@@ -438,7 +431,6 @@ func (dm *DataManager) CalculateDamageEXP(damage int) int {
 	return expGained
 }
 
-// ✅ NEW: CalculateDestructionEXP determines EXP for destroying targets
 func (dm *DataManager) CalculateDestructionEXP(targetType string, targetName interface{}) int {
 	if targetType == "tower" {
 		switch targetName {
