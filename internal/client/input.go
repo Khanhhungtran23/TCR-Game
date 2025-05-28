@@ -336,7 +336,7 @@ func (ih *InputHandler) GetAttackChoice(myTroops []game.Troop, enemyTowers []gam
 				// Check if Guard Towers are still alive
 				guardTowersAlive := false
 				for _, t := range enemyTowers {
-					if t.Name == game.GuardTower && t.HP > 0 {
+					if (t.Name == game.GuardTower1 || t.Name == game.GuardTower2) && t.HP > 0 {
 						guardTowersAlive = true
 						break
 					}

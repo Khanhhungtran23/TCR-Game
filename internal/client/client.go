@@ -336,22 +336,28 @@ func (c *Client) handleAttack() error {
 	// Sync troops first
 	c.syncLocalTroopsFromGameState()
 
-	// ✅ FILTER: Show all deployed troops that are still alive
+	// ✅ FILTER: Show only deployed troops that are still alive
 	var availableTroops []game.Troop
 
 	if c.gameState.GameMode == game.ModeSimple {
-		// Show all deployed troops that are still alive and haven't attacked this turn
+		// Chỉ hiển thị troops đã deploy trong turn này và còn sống
 		for _, troop := range c.myTroops {
-			for _, deployedName := range c.allDeployedTroops {
+			// Kiểm tra troop đã được deploy trong turn này
+			isDeployedThisTurn := false
+			for _, deployedName := range c.deployedThisTurn {
 				if string(troop.Name) == deployedName && troop.HP > 0 {
-					availableTroops = append(availableTroops, troop)
+					isDeployedThisTurn = true
 					break
 				}
+			}
+
+			if isDeployedThisTurn && troop.HP > 0 {
+				availableTroops = append(availableTroops, troop)
 			}
 		}
 
 		if len(availableTroops) == 0 {
-			c.display.PrintWarning("No available troops for attack. All deployed troops are destroyed.")
+			c.display.PrintWarning("No available troops for attack. You must deploy a troop first or all deployed troops are destroyed.")
 			return nil
 		}
 	} else {
@@ -361,14 +367,14 @@ func (c *Client) handleAttack() error {
 				availableTroops = append(availableTroops, troop)
 			}
 		}
+
+		if len(availableTroops) == 0 {
+			c.display.PrintWarning("No troops available for attack")
+			return nil
+		}
 	}
 
-	if len(availableTroops) == 0 {
-		c.display.PrintWarning("No troops available for attack")
-		return nil
-	}
-
-	// Get enemy towers
+	// Get enemy towers and filter alive ones
 	var enemyTowers []game.Tower
 	if c.gameState.Player1.ID == c.clientID {
 		enemyTowers = c.gameState.Player2.Towers
@@ -376,28 +382,33 @@ func (c *Client) handleAttack() error {
 		enemyTowers = c.gameState.Player1.Towers
 	}
 
+	var aliveTowers []game.Tower
+	for _, tower := range enemyTowers {
+		if tower.HP > 0 {
+			aliveTowers = append(aliveTowers, tower)
+		}
+	}
+
+	if len(aliveTowers) == 0 {
+		c.display.PrintWarning("No enemy towers left to attack")
+		return nil
+	}
+
 	// Let user choose attacker and target
-	attackerIndex, targetType, targetIndex, err := c.input.GetAttackChoice(availableTroops, enemyTowers, c.gameState.GameMode)
+	attackerIndex, targetType, targetIndex, err := c.input.GetAttackChoice(availableTroops, aliveTowers, c.gameState.GameMode)
 	if err != nil {
 		c.display.PrintWarning(err.Error())
 		return nil
 	}
 
 	selectedTroop := availableTroops[attackerIndex]
-	targetTower := enemyTowers[targetIndex]
+	targetTower := aliveTowers[targetIndex] // ✅ Sử dụng aliveTowers thay vì enemyTowers
 
-	// ✅ VALIDATION: Check troop is still alive and can attack
+	// ✅ VALIDATION: Double check troop is still alive
 	if selectedTroop.HP <= 0 {
 		c.display.PrintError(fmt.Sprintf("%s is destroyed (HP: %d) and cannot attack", selectedTroop.Name, selectedTroop.HP))
 		return nil
 	}
-
-	// ✅ TRACK: Mark this troop as having attacked this turn
-	// if c.gameState.GameMode == game.ModeSimple {
-	// 	troopName := string(selectedTroop.Name)
-	// 	c.troopAttacksThisTurn[troopName]++
-	// 	c.logger.Debug("Marked %s as attacked: %d/1", troopName, c.troopAttacksThisTurn[troopName])
-	// }
 
 	// Send attack message
 	msg := network.CreateAttackMessage(c.clientID, c.gameState.ID, selectedTroop.Name, targetType, string(targetTower.Name))
@@ -445,22 +456,22 @@ func (c *Client) handlePlayCard() error {
 		c.deployedThisTurn = append(c.deployedThisTurn, troopName)
 
 		// Track all deployed troops (persistent across turns)
-		isAlreadyDeployed := false
-		for _, deployed := range c.allDeployedTroops {
-			if deployed == troopName {
-				isAlreadyDeployed = true
-				break
-			}
-		}
-		if !isAlreadyDeployed {
-			c.allDeployedTroops = append(c.allDeployedTroops, troopName)
-		}
+		// isAlreadyDeployed := false
+		// for _, deployed := range c.allDeployedTroops {
+		// 	if deployed == troopName {
+		// 		isAlreadyDeployed = true
+		// 		break
+		// 	}
+		// }
+		// if !isAlreadyDeployed {
+		// 	c.allDeployedTroops = append(c.allDeployedTroops, troopName)
+		// }
 
-		// Initialize attack counter for this troop
-		if c.troopAttacksThisTurn == nil {
-			c.troopAttacksThisTurn = make(map[string]int)
-		}
-		c.troopAttacksThisTurn[troopName] = 0
+		// // Initialize attack counter for this troop
+		// if c.troopAttacksThisTurn == nil {
+		// 	c.troopAttacksThisTurn = make(map[string]int)
+		// }
+		// c.troopAttacksThisTurn[troopName] = 0
 	}
 
 	// Send summon message
@@ -774,6 +785,12 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 		// Check if I'm the destroyer
 		isMyDestruction := event.PlayerID == c.clientID
 		c.display.PrintTroopDestroyed(destroyer, troopName, owner, isMyDestruction)
+
+	case "TROOP_REVIVED":
+		troopName := string(event.TroopName)
+		if event.PlayerID == c.clientID {
+			c.display.PrintInfo(fmt.Sprintf("🔄 %s has been revived and is ready for battle!", troopName))
+		}
 
 	case "TURN_END":
 		// Don't display turn end events here - handled by handleTurnChange

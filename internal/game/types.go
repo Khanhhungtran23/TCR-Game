@@ -18,8 +18,9 @@ type TowerType string
 
 // TowerType represents the type and name of tower
 const (
-	KingTower  TowerType = "King Tower"
-	GuardTower TowerType = "Guard Tower"
+	KingTower   TowerType = "King Tower"
+	GuardTower1 TowerType = "Guard Tower 1"
+	GuardTower2 TowerType = "Guard Tower 2"
 )
 
 type Troop struct {
@@ -29,6 +30,7 @@ type Troop struct {
 	DEF     int       `json:"def"`
 	CRIT    float64   `json:"crit"` // Crit chance as percentage (E.g : 10% = 0.10)
 	MANA    int       `json:"mana"`
+	MaxHP   int       `json:"max_hp"`
 	EXP     int       `json:"exp"`
 	Special string    `json:"special,omitempty"`
 	Level   int       `json:"level"`

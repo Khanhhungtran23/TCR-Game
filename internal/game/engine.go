@@ -122,6 +122,24 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		return nil, fmt.Errorf("troop not available")
 	}
 
+	// ✅ REVIVE TROOP: Reset HP to original stats khi deploy trong Simple mode
+	if ge.gameState.GameMode == ModeSimple {
+		// Lấy base stats từ specs và scale theo level
+		baseSpec := ge.gameSpecs.TroopSpecs[troopName]
+		playerLevel := selectedTroop.Level
+
+		// Restore to full HP (scaled by level)
+		fullHP := int(float64(baseSpec.HP) * (1.0 + float64(playerLevel-1)*StatScalePerLevel))
+		selectedTroop.HP = fullHP
+		selectedTroop.MaxHP = fullHP
+
+		ge.logEvent("TROOP_REVIVED", playerID, map[string]interface{}{
+			"troop":  troopName,
+			"new_hp": fullHP,
+			"max_hp": fullHP,
+		})
+	}
+
 	// Check mana cost (Enhanced mode only)
 	if ge.gameState.GameMode == ModeEnhanced {
 		if player.Mana < selectedTroop.MANA {
@@ -237,7 +255,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	// Check if any Guard Tower is destroyed - if so, can attack King Tower
 	guardTowersAlive := 0
 	for i := range opponent.Towers {
-		if opponent.Towers[i].Name == GuardTower && opponent.Towers[i].HP > 0 {
+		if (opponent.Towers[i].Name == GuardTower1 || opponent.Towers[i].Name == GuardTower2) && opponent.Towers[i].HP > 0 {
 			guardTowersAlive++
 		}
 	}
@@ -253,7 +271,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	} else {
 		// Otherwise, attack weakest Guard Tower
 		for i := range opponent.Towers {
-			if opponent.Towers[i].Name == GuardTower && opponent.Towers[i].HP > 0 {
+			if (opponent.Towers[i].Name == GuardTower1 || opponent.Towers[i].Name == GuardTower2) && opponent.Towers[i].HP > 0 {
 				if targetTowerIndex == -1 || opponent.Towers[i].HP < opponent.Towers[targetTowerIndex].HP {
 					targetTowerIndex = i
 				}
@@ -702,13 +720,13 @@ func (ge *GameEngine) validateAttackTargetUpdated(opponent *Player, targetType, 
 	if targetName == "King Tower" {
 		guardTowersAlive := 0
 		for _, tower := range opponent.Towers {
-			if tower.Name == GuardTower && tower.HP > 0 {
+			if (tower.Name == GuardTower1 || tower.Name == GuardTower2) && tower.HP > 0 {
 				guardTowersAlive++
 			}
 		}
 
-		// If all Guard Towers are destroyed, can attack King Tower
-		if guardTowersAlive == 2 { // Both Guard Towers still alive
+		// If both Guard Towers are still alive, cannot attack King Tower
+		if guardTowersAlive == 2 {
 			return fmt.Errorf("must destroy at least one Guard Tower before attacking King Tower")
 		}
 	}
@@ -740,8 +758,8 @@ func (ge *GameEngine) validateAttackTarget(opponent *Player, targetType, targetN
 	// Check if trying to attack King Tower while Guard Towers are alive
 	if targetName == "King Tower" {
 		for _, tower := range opponent.Towers {
-			if tower.Name == GuardTower && tower.HP > 0 {
-				return fmt.Errorf("must destroy Guard Towers before attacking King Tower")
+			if (tower.Name == GuardTower1 || tower.Name == GuardTower2) && tower.HP > 0 {
+				return fmt.Errorf("must destroy at least one Guard Tower before attacking King Tower")
 			}
 		}
 	}

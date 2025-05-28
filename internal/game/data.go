@@ -299,8 +299,10 @@ func (dm *DataManager) generateRandomTroops(playerData *PlayerData) []Troop {
 		troops[i] = Troop{
 			Name:    troopType,
 			HP:      dm.scaleStatByLevel(baseSpec.HP, playerLevel),
+			MaxHP:   dm.scaleStatByLevel(baseSpec.HP, playerLevel),
 			ATK:     dm.scaleStatByLevel(baseSpec.ATK, playerLevel),
 			DEF:     dm.scaleStatByLevel(baseSpec.DEF, playerLevel),
+			CRIT:    baseSpec.CRIT,
 			MANA:    baseSpec.MANA,
 			EXP:     baseSpec.EXP,
 			Special: baseSpec.Special,
@@ -317,39 +319,47 @@ func (dm *DataManager) generateTowers(playerData *PlayerData) []Tower {
 
 	// Create 1 King Tower + 2 Guard Towers
 	kingSpec := dm.gameSpecs.TowerSpecs[KingTower]
-	guardSpec := dm.gameSpecs.TowerSpecs[GuardTower]
+	guardSpec1 := dm.gameSpecs.TowerSpecs[GuardTower1]
+	guardSpec2 := dm.gameSpecs.TowerSpecs[GuardTower2]
 
 	kingLevel := playerData.TowerLevels[KingTower]
-	guardLevel := playerData.TowerLevels[GuardTower]
+	guardLevel1 := playerData.TowerLevels[GuardTower1]
+	guardLevel2 := playerData.TowerLevels[GuardTower2]
 
 	// King Tower
-	kingHP := dm.scaleStatByLevel(kingSpec.HP, kingLevel)
 	towers[0] = Tower{
 		Name:     KingTower,
-		HP:       kingHP,
-		MaxHP:    kingHP,
+		HP:       dm.scaleStatByLevel(kingSpec.HP, kingLevel),
+		MaxHP:    dm.scaleStatByLevel(kingSpec.HP, kingLevel),
 		ATK:      dm.scaleStatByLevel(kingSpec.ATK, kingLevel),
 		DEF:      dm.scaleStatByLevel(kingSpec.DEF, kingLevel),
 		CRIT:     kingSpec.CRIT,
-		EXP:      kingSpec.EXP,
 		Level:    kingLevel,
 		IsActive: true,
 	}
 
-	// Guard Towers
-	for i := 1; i < TowersPerPlayer; i++ {
-		guardHP := dm.scaleStatByLevel(guardSpec.HP, guardLevel)
-		towers[i] = Tower{
-			Name:     GuardTower,
-			HP:       guardHP,
-			MaxHP:    guardHP,
-			ATK:      dm.scaleStatByLevel(guardSpec.ATK, guardLevel),
-			DEF:      dm.scaleStatByLevel(guardSpec.DEF, guardLevel),
-			CRIT:     guardSpec.CRIT,
-			EXP:      guardSpec.EXP,
-			Level:    guardLevel,
-			IsActive: true,
-		}
+	// Guard Tower 1
+	towers[1] = Tower{
+		Name:     GuardTower1,
+		HP:       dm.scaleStatByLevel(guardSpec1.HP, guardLevel1),
+		MaxHP:    dm.scaleStatByLevel(guardSpec1.HP, guardLevel1),
+		ATK:      dm.scaleStatByLevel(guardSpec1.ATK, guardLevel1),
+		DEF:      dm.scaleStatByLevel(guardSpec1.DEF, guardLevel1),
+		CRIT:     guardSpec1.CRIT,
+		Level:    guardLevel1,
+		IsActive: true,
+	}
+
+	// Guard Tower 2
+	towers[2] = Tower{
+		Name:     GuardTower2,
+		HP:       dm.scaleStatByLevel(guardSpec2.HP, guardLevel2),
+		MaxHP:    dm.scaleStatByLevel(guardSpec2.HP, guardLevel2),
+		ATK:      dm.scaleStatByLevel(guardSpec2.ATK, guardLevel2),
+		DEF:      dm.scaleStatByLevel(guardSpec2.DEF, guardLevel2),
+		CRIT:     guardSpec2.CRIT,
+		Level:    guardLevel2,
+		IsActive: true,
 	}
 
 	return towers
@@ -385,5 +395,9 @@ func initializePlayerForGame(player *Player, specs *GameSpecs) {
 	}
 	if player.MaxMana == 0 {
 		player.MaxMana = MaxMana
+	}
+
+	for i := range player.Troops {
+		player.Troops[i].MaxHP = player.Troops[i].HP
 	}
 }

@@ -7,7 +7,14 @@
         "crit": 0.10,
         "exp": 200
       },
-      "Guard Tower": {
+      "Guard Tower 1": {
+        "hp": 1000,
+        "atk": 300,
+        "def": 100,
+        "crit": 0.05,
+        "exp": 100
+      },
+        "Guard Tower 2": {
         "hp": 1000,
         "atk": 300,
         "def": 100,
