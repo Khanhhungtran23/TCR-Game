@@ -331,7 +331,9 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 	}
 
 	// Check tower destruction
+	towerDestroyed := false
 	if targetTower.HP == 0 && oldHP > 0 {
+		towerDestroyed = true
 		ge.awardEXPForDestruction(playerID, "tower", targetTower.Name)
 
 		expGained := ge.dataManager.CalculateDestructionEXP("tower", targetTower.Name)
@@ -388,6 +390,7 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		Data: map[string]interface{}{
 			"target_hp": targetTower.HP,
 			"old_hp":    oldHP,
+			"tower_destroyed": towerDestroyed,
 		},
 	}
 
@@ -673,7 +676,9 @@ func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, tar
 	}
 
 	// Check if tower is destroyed
+	towerDestroyed := false
 	if targetTower.HP == 0 && oldHP > 0 {
+		towerDestroyed = true
 		ge.awardEXPForDestruction(playerID, "tower", targetTower.Name)
 		ge.handleTowerDestroyed(opponent, targetTower)
 	}
@@ -690,6 +695,7 @@ func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, tar
 		Data: map[string]interface{}{
 			"target_hp": targetTower.HP,
 			"old_hp":    oldHP,
+			"tower_destroyed": towerDestroyed,
 		},
 	}
 

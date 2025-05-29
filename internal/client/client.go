@@ -36,6 +36,7 @@ type Client struct {
 	troopAttackCount   map[string]int  // Track attacks per troop per turn
 	deployedThisTurn   []string        // Only troops deployed THIS turn
 	lastWaitingMessage string
+	troopDestroyedTower map[string]bool // Track if a troop destroyed a tower in its last attack
 }
 
 // NewClient creates a new client instance
@@ -52,6 +53,7 @@ func NewClient(serverAddr string) *Client {
 		deployedTroops:   make(map[string]bool),
 		troopAttackCount: make(map[string]int),
 		deployedThisTurn: []string{},
+		troopDestroyedTower: make(map[string]bool),
 	}
 }
 
@@ -532,7 +534,7 @@ func (c *Client) connectToServer() error {
 func (c *Client) authenticate() error {
 	for {
 		c.display.PrintSeparator()
-		c.display.PrintInfo("🔐 AUTHENTICATION 🔐")
+		c.display.PrintInfo("🔐 AUTHENTICATION asdadasdasasd 🔐")
 		c.display.PrintInfo("1. Login")
 		c.display.PrintInfo("2. Register")
 		c.display.PrintInfo("3. Quit")
@@ -693,6 +695,7 @@ func (c *Client) resetGameTracking() {
 	c.troopAttackCount = make(map[string]int)
 	c.deployedThisTurn = []string{}
 	c.lastWaitingMessage = ""
+	c.troopDestroyedTower = make(map[string]bool)
 }
 
 // findMatch initiates matchmaking
@@ -1081,9 +1084,14 @@ func (c *Client) handleAttack() error {
 	if c.gameState.GameMode == game.ModeSimple {
 		for _, troop := range c.myTroops {
 			troopName := string(troop.Name)
-			// Check if troop is deployed and alive and hasn't attacked this turn
-			if c.deployedTroops[troopName] && troop.HP > 0 && c.troopAttackCount[troopName] < 1 {
-				availableTroops = append(availableTroops, troop)
+			// Check if troop is deployed and alive
+			if c.deployedTroops[troopName] && troop.HP > 0 {
+				// Allow attack if:
+				// 1. Troop hasn't attacked this turn OR
+				// 2. Troop destroyed a tower in its last attack
+				if c.troopAttackCount[troopName] < 1 || c.troopDestroyedTower[troopName] {
+					availableTroops = append(availableTroops, troop)
+				}
 			}
 		}
 
@@ -1140,6 +1148,10 @@ func (c *Client) handleAttack() error {
 
 	troopName := string(selectedTroop.Name)
 	c.troopAttackCount[troopName]++
+	
+	// Reset the tower destruction flag before sending the attack
+	// The server will set it back to true if the tower is destroyed
+	c.troopDestroyedTower[troopName] = false
 
 	msg := network.CreateAttackMessage(c.clientID, c.gameState.ID, selectedTroop.Name, targetType, string(targetTower.Name))
 	return c.sendMessage(msg)
@@ -1495,7 +1507,26 @@ func (c *Client) handleGameEvent(msg *network.Message) error {
 	}
 
 	c.syncLocalTroopsFromGameState()
+
+	// Process the event
 	c.displayGameEvent(event)
+
+	// After displaying the event, check if a tower was destroyed
+	if event.Type == game.ActionAttack {
+		if targetHP, ok := event.Data["target_hp"].(float64); ok {
+			if int(targetHP) <= 0 {
+				// Tower was destroyed in this attack
+				if event.PlayerID == c.clientID {
+					troopName := string(event.TroopName)
+					c.troopDestroyedTower[troopName] = true
+					c.display.PrintInfo(fmt.Sprintf("🎯 %s destroyed a tower and can attack again!", troopName))
+				}
+				// Always print a clear destruction message
+				c.display.PrintTowerDestroyed(string(event.TroopName), event.TargetName, "opponent", event.PlayerID == c.clientID)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -1574,7 +1605,13 @@ func (c *Client) displayGameEvent(event game.CombatAction) {
 
 		isMyDestruction := event.PlayerID == c.clientID
 		c.display.PrintTowerDestroyed(destroyer, towerName, owner, isMyDestruction)
+		
+		// If it was our attack that destroyed the tower, mark the troop as able to attack again
 		if isMyDestruction {
+			troopName := destroyer
+			c.troopDestroyedTower[troopName] = true
+			c.display.PrintInfo(fmt.Sprintf("🎯 %s destroyed a tower and can attack again!", troopName))
+			
 			expGained := 100
 			if strings.Contains(towerName, "King") {
 				expGained = 200

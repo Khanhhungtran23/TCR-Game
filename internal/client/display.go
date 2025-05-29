@@ -221,8 +221,17 @@ func (d *Display) PrintTowerStatus(towers []game.Tower, playerName string) {
 func (d *Display) PrintTroops(troops []game.Troop) {
 	d.infoColor.Println("\n=== Your Troops ===")
 	for i, troop := range troops {
-		d.playerColor.Printf("%d. %s (Cost: %d, HP: %d, ATK: %d, DEF: %d) - %s\n",
-			i+1, troop.Name, troop.MANA, troop.HP, troop.ATK, troop.DEF, troop.Special)
+		status := ""
+		if troop.HP <= 0 {
+			status = " [DESTROYED]"
+		} else if troop.Name == game.Queen {
+			status = " [HEALER]"
+		} else {
+			status = " [CAN ATTACK]"
+		}
+
+		d.playerColor.Printf("%d. %s%s (HP: %d, ATK: %d, DEF: %d) - %s\n",
+			i+1, troop.Name, status, troop.HP, troop.ATK, troop.DEF, troop.Special)
 	}
 }
 
