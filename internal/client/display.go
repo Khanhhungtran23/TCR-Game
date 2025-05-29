@@ -121,7 +121,7 @@ func (d *Display) PrintAttack(attacker, target string, damage int, isCrit bool) 
 
 func (d *Display) PrintCounterAttack(attacker, target string, damage int) {
 	timestamp := time.Now().Format("15:04:05")
-	d.warningColor.Printf("[%s] [COUNTER] %s strikes back at %s - Damage: %d\n",
+	d.warningColor.Printf("[%s] [🛡️  COUNTER-ATTACK] %s counter-attacks %s for %d damage!\n",
 		timestamp, attacker, target, damage)
 }
 

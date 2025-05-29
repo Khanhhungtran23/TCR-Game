@@ -410,7 +410,17 @@ func (ge *GameEngine) executeCounterAttack(playerID string, troopName TroopType)
 		}
 	}
 
-	if targetTroop == nil || targetTroop.HP <= 0 {
+	if targetTroop == nil {
+		return nil
+	}
+
+	// Special case for Queen - she can't be attacked
+	if targetTroop.Name == Queen {
+		return nil
+	}
+
+	// Check if troop is already destroyed
+	if targetTroop.HP <= 0 {
 		return nil
 	}
 

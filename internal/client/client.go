@@ -335,14 +335,16 @@ func (c *Client) showDetailedGameInfo() {
 		status := ""
 
 		if c.gameState.GameMode == game.ModeEnhanced {
-			if troop.HP > 0 {
+			if troop.HP > 0 || troop.Name == game.Queen {
 				status = fmt.Sprintf(" [ALIVE - Cost: %d MANA]", troop.MANA)
 			} else {
 				status = " [DESTROYED]"
 			}
 		} else if c.gameState.GameMode == game.ModeSimple {
 			troopName := string(troop.Name)
-			if c.deployedTroops[troopName] {
+			if troop.HP <= 0 && troop.Name != game.Queen {
+				status = " [DESTROYED]"
+			} else if c.deployedTroops[troopName] {
 				status = " [DEPLOYED"
 				if c.troopAttackCount[troopName] >= 1 {
 					status += " - ATTACKED]"
@@ -1174,6 +1176,41 @@ func (c *Client) handlePlayCard() error {
 	selectedTroop := c.myTroops[troopIndex]
 	troopName := string(selectedTroop.Name)
 
+	// If troop is destroyed, respawn it with full HP
+	if selectedTroop.HP <= 0 && selectedTroop.Name != game.Queen {
+		// Calculate full HP (same formula as server)
+		level := selectedTroop.Level
+		if level == 0 {
+			level = 1
+		}
+
+		// Get base HP for each troop type
+		var baseHP int
+		switch selectedTroop.Name {
+		case game.Knight:
+			baseHP = 350
+		case game.Pawn:
+			baseHP = 150
+		case game.Bishop:
+			baseHP = 250
+		case game.Rook:
+			baseHP = 300
+		case game.Prince:
+			baseHP = 500
+		default:
+			baseHP = 100 // Default fallback
+		}
+
+		// Apply level scaling: 10% increase per level
+		fullHP := int(float64(baseHP) * (1.0 + float64(level-1)*0.10))
+
+		// Update local troop HP
+		c.myTroops[troopIndex].HP = fullHP
+		c.myTroops[troopIndex].MaxHP = fullHP
+
+		c.display.PrintInfo(fmt.Sprintf("🔄 %s has been respawned with %d HP!", selectedTroop.Name, fullHP))
+	}
+
 	if c.gameState.GameMode == game.ModeSimple {
 		c.deployedThisTurn = append(c.deployedThisTurn, troopName)
 		c.deployedTroops[troopName] = true
@@ -1200,53 +1237,7 @@ func (c *Client) handlePlayCard() error {
 	}
 
 	msg := network.CreateSummonMessage(c.clientID, c.gameState.ID, selectedTroop.Name)
-	err = c.sendMessage(msg)
-
-	if err == nil && c.gameState.GameMode == game.ModeEnhanced {
-		// Calculate full HP (same formula as server)
-		level := selectedTroop.Level
-		if level == 0 {
-			level = 1
-		}
-
-		// Get base HP for each troop type
-		var baseHP int
-		switch selectedTroop.Name {
-		case game.Knight:
-			baseHP = 350
-		case game.Pawn:
-			baseHP = 150
-		case game.Bishop:
-			baseHP = 250
-		case game.Rook:
-			baseHP = 300
-		case game.Prince:
-			baseHP = 500
-		case game.Queen:
-			baseHP = 0 // Queen has 0 HP
-		default:
-			baseHP = 100 // Default fallback
-		}
-
-		if baseHP > 0 {
-			// Apply level scaling: 10% increase per level
-			fullHP := int(float64(baseHP) * (1.0 + float64(level-1)*0.10))
-
-			// Update local troop HP
-			for i := range c.myTroops {
-				if c.myTroops[i].Name == selectedTroop.Name {
-					oldHP := c.myTroops[i].HP
-					c.myTroops[i].HP = fullHP
-					c.myTroops[i].MaxHP = fullHP
-
-					c.logger.Debug("🔄 Locally revived %s: %d HP -> %d HP", selectedTroop.Name, oldHP, fullHP)
-					break
-				}
-			}
-		}
-	}
-
-	return err
+	return c.sendMessage(msg)
 }
 
 // handleEndTurn handles turn ending (Simple mode)

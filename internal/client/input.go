@@ -96,6 +96,22 @@ func (ih *InputHandler) GetTroopChoice(troops []game.Troop, availableMana int, g
 	playableTroops := make([]int, 0)
 
 	for i, troop := range troops {
+		// Handle Queen specially
+		if troop.Name == game.Queen {
+			ih.display.PrintInfo(fmt.Sprintf("%d. %s ✓ Special: %s",
+				i+1, troop.Name, troop.Special))
+			playableTroops = append(playableTroops, i)
+			continue
+		}
+
+		// For other troops, check if they're destroyed
+		if troop.HP <= 0 {
+			ih.display.PrintInfo(fmt.Sprintf("%d. %s (HP: %d, ATK: %d) ✓ Can respawn",
+				i+1, troop.Name, troop.HP, troop.ATK))
+			playableTroops = append(playableTroops, i)
+			continue
+		}
+
 		// In Simple mode, all troops are playable (no mana cost)
 		// In Enhanced mode, check mana cost
 		isPlayable := gameMode == "simple" || troop.MANA <= availableMana
@@ -292,8 +308,8 @@ func (ih *InputHandler) GetAttackChoice(myTroops []game.Troop, enemyTowers []gam
 	availableAttackers := make([]int, 0)
 
 	for i, troop := range myTroops {
-		// Skip Queen as it can't attack
-		if troop.Name != game.Queen {
+		// Skip Queen as it can't attack and dead troops
+		if troop.Name != game.Queen && troop.HP > 0 {
 			ih.display.PrintInfo(fmt.Sprintf("%d. %s (ATK: %d)", i+1, troop.Name, troop.ATK))
 			availableAttackers = append(availableAttackers, i)
 		}

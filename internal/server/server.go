@@ -362,14 +362,20 @@ func (s *Server) handleEndTurn(client *Client, msg *network.Message) error {
 	// Get updated game state
 	updatedGameState := gameEngine.GetGameState()
 
-	// Broadcast turn change to both players
+	// Create turn change message
 	response := network.NewMessage(network.MsgTurnChange, "", client.GameID)
 	response.SetData("current_turn", updatedGameState.CurrentTurn)
 	response.SetData("game_state", updatedGameState)
 
 	s.logger.Info("Turn switched from %s to %s", client.Username, updatedGameState.CurrentTurn)
 
-	return s.broadcastToGame(client.GameID, response)
+	// Broadcast turn change to both players
+	if err := s.broadcastToGame(client.GameID, response); err != nil {
+		s.logger.Error("Failed to broadcast turn change: %v", err)
+		return err
+	}
+
+	return nil
 }
 
 // handleSurrender processes surrender actions
