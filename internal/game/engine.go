@@ -1134,3 +1134,34 @@ func (ge *GameEngine) IsRunning() bool {
 func generateGameID() string {
 	return fmt.Sprintf("game_%d_%d", time.Now().Unix(), rand.Intn(1000))
 }
+
+// StopGame stops the game and cleans up resources
+func (ge *GameEngine) StopGame() {
+	if !ge.isRunning {
+		return // Game already stopped
+	}
+
+	ge.isRunning = false
+	ge.gameState.Status = StatusFinished
+
+	if ge.gameTimer != nil {
+		ge.gameTimer.Stop()
+	}
+
+	// Send final game end event
+	gameEndEvent := CombatAction{
+		Type:      "GAME_END",
+		PlayerID:  "",
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"winner": ge.gameState.Winner,
+			"reason": "game_stopped",
+		},
+	}
+	ge.eventChan <- gameEndEvent
+
+	ge.logEvent("GAME_STOPPED", "", map[string]interface{}{
+		"towers_p1": ge.gameState.TowersKilled.Player1,
+		"towers_p2": ge.gameState.TowersKilled.Player2,
+	})
+}

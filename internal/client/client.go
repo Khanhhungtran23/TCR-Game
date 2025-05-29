@@ -493,9 +493,15 @@ func (c *Client) Start() error {
 
 	go c.messageHandler()
 
-	if err := c.authenticate(); err != nil {
-		c.display.PrintError(fmt.Sprintf("Authentication failed: %v", err))
-		return err
+	for {
+		if err := c.authenticate(); err != nil {
+			if err.Error() == "user quit" {
+				return nil
+			}
+			c.display.PrintError(fmt.Sprintf("Authentication failed: %v", err))
+			continue
+		}
+		break
 	}
 
 	return c.runMainLoop()
@@ -528,36 +534,52 @@ func (c *Client) authenticate() error {
 		c.display.PrintInfo("1. Login")
 		c.display.PrintInfo("2. Register")
 		c.display.PrintInfo("3. Quit")
+		c.display.PrintInfo("")
+		c.display.PrintInfo("💡 Tip: If you see 'account already logged in', try again in a few seconds")
 
 		choice := c.input.GetMenuChoice(1, 3)
 
+		var err error
 		switch choice {
 		case 1:
-			if err := c.handleLogin(); err != nil {
-				c.display.PrintError(fmt.Sprintf("Login failed: %v", err))
-				continue
-			}
-			return nil
+			err = c.handleLogin()
 		case 2:
-			if err := c.handleRegister(); err != nil {
-				c.display.PrintError(fmt.Sprintf("Registration failed: %v", err))
-				continue
-			}
-			return nil
+			err = c.handleRegister()
 		case 3:
 			return fmt.Errorf("user quit")
 		}
+
+		if err != nil {
+			// Check for specific error types
+			errMsg := err.Error()
+			if strings.Contains(errMsg, "account is already logged in") {
+				c.display.PrintError("⚠️ This account is currently in use. Please try again in a few seconds.")
+				time.Sleep(2 * time.Second) // Give a small delay before retry
+			} else if strings.Contains(errMsg, "invalid credentials") {
+				c.display.PrintError("❌ Invalid username or password. Please try again.")
+			} else if strings.Contains(errMsg, "username already exists") {
+				c.display.PrintError("❌ This username is already taken. Please choose another one.")
+			} else {
+				c.display.PrintError(fmt.Sprintf("Authentication failed: %v", err))
+			}
+			continue
+		}
+
+		return nil
 	}
 }
 
 // handleLogin processes user login
 func (c *Client) handleLogin() error {
+	c.display.PrintSeparator()
+	c.display.PrintInfo("📝 LOGIN")
+	
 	username := c.input.GetUsername()
 	password := c.input.GetStringInput("Enter password: ", 4, 50)
 
 	msg := network.CreateAuthMessage(network.MsgLogin, username, password)
 	if err := c.sendMessage(msg); err != nil {
-		return err
+		return fmt.Errorf("failed to send login request: %w", err)
 	}
 
 	return c.waitForAuth()
@@ -565,6 +587,9 @@ func (c *Client) handleLogin() error {
 
 // handleRegister processes user registration
 func (c *Client) handleRegister() error {
+	c.display.PrintSeparator()
+	c.display.PrintInfo("📝 REGISTRATION")
+	
 	username := c.input.GetUsername()
 	password := c.input.GetStringInput("Enter password (min 4 chars): ", 4, 50)
 	confirmPassword := c.input.GetStringInput("Confirm password: ", 4, 50)
@@ -575,7 +600,7 @@ func (c *Client) handleRegister() error {
 
 	msg := network.CreateAuthMessage(network.MsgRegister, username, password)
 	if err := c.sendMessage(msg); err != nil {
-		return err
+		return fmt.Errorf("failed to send registration request: %w", err)
 	}
 
 	return c.waitForAuth()
@@ -583,18 +608,27 @@ func (c *Client) handleRegister() error {
 
 // waitForAuth waits for authentication response
 func (c *Client) waitForAuth() error {
-	timeout := time.NewTimer(180 * time.Second)
+	timeout := time.NewTimer(30 * time.Second) // Reduced timeout to 30 seconds
 	defer timeout.Stop()
 
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
+	// Show loading indicator
+	loadingChars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	i := 0
+
 	for {
 		select {
 		case <-timeout.C:
-			return fmt.Errorf("authentication timeout")
+			return fmt.Errorf("authentication timeout - server not responding")
 		case <-ticker.C:
+			// Update loading indicator
+			c.display.PrintInfo(fmt.Sprintf("\r%s Authenticating...", loadingChars[i]))
+			i = (i + 1) % len(loadingChars)
+
 			if c.player != nil {
+				c.display.PrintInfo("\r✅ Authentication successful!")
 				return nil
 			}
 		}
@@ -1399,7 +1433,7 @@ func (c *Client) handleAuthFail(msg *network.Message) error {
 
 	message, _ := authResp["message"].(string)
 	c.display.PrintError(message)
-	return nil
+	return fmt.Errorf("authentication failed: %s", message)
 }
 
 // handleMatchFound processes match found notification

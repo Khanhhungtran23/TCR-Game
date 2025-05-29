@@ -152,7 +152,11 @@ func (dm *DataManager) AuthenticatePlayer(username, password string) (*PlayerDat
 		player := &dm.playerDB.Players[i]
 		if player.Username == username {
 			if player.Password == password {
+				if player.IsActive {
+					return nil, fmt.Errorf("account is already logged in")
+				}
 				player.LastLogin = time.Now()
+				player.IsActive = true
 				dm.savePlayerDatabase()
 				return player, nil
 			}
@@ -180,6 +184,7 @@ func (dm *DataManager) RegisterPlayer(username, password string) (*PlayerData, e
 		GamesPlayed: 0,
 		GamesWon:    0,
 		LastLogin:   time.Now(),
+		IsActive:    true,
 	}
 
 	// Initialize troop and tower levels to 1
@@ -465,4 +470,16 @@ func initializePlayerForGame(player *Player, specs *GameSpecs) {
 	for i := range player.Troops {
 		player.Troops[i].MaxHP = player.Troops[i].HP
 	}
+}
+
+// LogoutPlayer marks a player as inactive
+func (dm *DataManager) LogoutPlayer(username string) error {
+	for i := range dm.playerDB.Players {
+		player := &dm.playerDB.Players[i]
+		if player.Username == username {
+			player.IsActive = false
+			return dm.savePlayerDatabase()
+		}
+	}
+	return fmt.Errorf("player not found")
 }

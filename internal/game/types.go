@@ -127,6 +127,7 @@ type PlayerData struct {
 	GamesPlayed int               `json:"games_played"`
 	GamesWon    int               `json:"games_won"`
 	LastLogin   time.Time         `json:"last_login"`
+	IsActive    bool              `json:"is_active"`
 }
 
 // Game constants

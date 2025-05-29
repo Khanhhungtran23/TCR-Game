@@ -3,23 +3,24 @@
     {
       "username": "khanhhung",
       "password": "1234",
-      "level": 1,
-      "exp": 0,
+      "level": 2,
+      "exp": 50,
       "troop_levels": {
-        "Bishop": 1,
-        "Knight": 1,
-        "Pawn": 1,
-        "Prince": 1,
-        "Queen": 1,
-        "Rook": 1
+        "Bishop": 2,
+        "Knight": 2,
+        "Pawn": 2,
+        "Prince": 2,
+        "Queen": 2,
+        "Rook": 2
       },
       "tower_levels": {
-        "Guard Tower": 1,
-        "King Tower": 1
+        "Guard Tower": 2,
+        "King Tower": 2
       },
-      "games_played": 0,
-      "games_won": 0,
-      "last_login": "2025-05-27T07:48:38.849704+07:00"
+      "games_played": 6,
+      "games_won": 3,
+      "last_login": "2025-05-29T17:59:25.4611258+07:00",
+      "is_active": true
     },
     {
       "username": "bao",
@@ -40,7 +41,8 @@
       },
       "games_played": 0,
       "games_won": 0,
-      "last_login": "2025-05-28T22:29:17.07144+07:00"
+      "last_login": "2025-05-28T22:29:17.07144+07:00",
+      "is_active": false
     },
     {
       "username": "hung",
@@ -62,7 +64,8 @@
       },
       "games_played": 22,
       "games_won": 10,
-      "last_login": "2025-05-28T23:27:29.422046+07:00"
+      "last_login": "2025-05-29T18:05:26.7926876+07:00",
+      "is_active": true
     },
     {
       "username": "baoo",
@@ -84,7 +87,8 @@
       },
       "games_played": 22,
       "games_won": 1,
-      "last_login": "2025-05-28T23:27:55.295996+07:00"
+      "last_login": "2025-05-28T23:27:55.295996+07:00",
+      "is_active": false
     }
   ]
 }

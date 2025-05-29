@@ -114,23 +114,54 @@ func (s *Server) Stop() error {
 
 // handleClient manages individual client connections
 func (s *Server) handleClient(conn net.Conn) {
-	defer conn.Close()
-
-	clientID := generateClientID()
 	client := &Client{
-		ID:       clientID,
+		ID:       generateClientID(),
 		Conn:     conn,
+		Writer:   bufio.NewWriter(conn),
 		IsActive: true,
 		LastPing: time.Now(),
-		Writer:   bufio.NewWriter(conn),
 	}
 
-	s.logger.Info("New client connected: %s from %s", clientID, conn.RemoteAddr())
-
-	// Add to clients map
 	s.mu.Lock()
-	s.clients[clientID] = client
+	s.clients[client.ID] = client
 	s.mu.Unlock()
+
+	defer func() {
+		s.mu.Lock()
+		delete(s.clients, client.ID)
+		s.mu.Unlock()
+
+		// If client was logged in, mark them as inactive
+		if client.Username != "" {
+			if err := s.dataManager.LogoutPlayer(client.Username); err != nil {
+				s.logger.Error("Failed to logout player %s: %v", client.Username, err)
+			}
+		}
+
+		// If client was in a game, handle game cleanup
+		if client.GameID != "" {
+			if gameEngine, exists := s.games[client.GameID]; exists {
+				// Notify other player about disconnect
+				for _, otherClient := range s.clients {
+					if otherClient.GameID == client.GameID && otherClient.ID != client.ID {
+						msg := network.NewMessage(network.MsgDisconnect, otherClient.ID, client.GameID)
+						msg.SetData("disconnect_info", map[string]interface{}{
+							"player_id": client.ID,
+							"reason":    "disconnected",
+						})
+						s.sendMessage(otherClient, msg)
+					}
+				}
+				gameEngine.StopGame()
+				delete(s.games, client.GameID)
+			}
+		}
+
+		conn.Close()
+		s.logger.Info("Client %s disconnected", client.ID)
+	}()
+
+	s.logger.Info("New client connected: %s from %s", client.ID, conn.RemoteAddr())
 
 	// Handle client messages
 	scanner := bufio.NewScanner(conn)
@@ -141,14 +172,10 @@ func (s *Server) handleClient(conn net.Conn) {
 
 		data := scanner.Bytes()
 		if err := s.processMessage(client, data); err != nil {
-			s.logger.Error("Error processing message from %s: %v", clientID, err)
+			s.logger.Error("Error processing message from %s: %v", client.ID, err)
 			s.sendError(client, "PROCESSING_ERROR", err.Error())
 		}
 	}
-
-	// Cleanup client
-	s.removeClient(clientID)
-	s.logger.Info("Client disconnected: %s", clientID)
 }
 
 // processMessage handles incoming messages from clients
