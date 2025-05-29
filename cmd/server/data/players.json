@@ -17,10 +17,10 @@
         "Guard Tower": 2,
         "King Tower": 2
       },
-      "games_played": 7,
+      "games_played": 9,
       "games_won": 3,
-      "last_login": "2025-05-29T23:03:23.3945349+07:00",
-      "is_active": true
+      "last_login": "2025-05-30T01:15:15.4957439+07:00",
+      "is_active": false
     },
     {
       "username": "bao",
@@ -48,7 +48,7 @@
       "username": "hung",
       "password": "1234",
       "level": 7,
-      "exp": 53,
+      "exp": 153,
       "troop_levels": {
         "Bishop": 7,
         "Knight": 7,
@@ -62,10 +62,10 @@
         "Guard Tower 2": 7,
         "King Tower": 7
       },
-      "games_played": 23,
-      "games_won": 11,
-      "last_login": "2025-05-29T23:03:18.2746693+07:00",
-      "is_active": true
+      "games_played": 25,
+      "games_won": 13,
+      "last_login": "2025-05-30T01:15:07.9099978+07:00",
+      "is_active": false
     },
     {
       "username": "baoo",

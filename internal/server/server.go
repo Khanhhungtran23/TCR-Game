@@ -126,41 +126,6 @@ func (s *Server) handleClient(conn net.Conn) {
 	s.clients[client.ID] = client
 	s.mu.Unlock()
 
-	defer func() {
-		s.mu.Lock()
-		delete(s.clients, client.ID)
-		s.mu.Unlock()
-
-		// If client was logged in, mark them as inactive
-		if client.Username != "" {
-			if err := s.dataManager.LogoutPlayer(client.Username); err != nil {
-				s.logger.Error("Failed to logout player %s: %v", client.Username, err)
-			}
-		}
-
-		// If client was in a game, handle game cleanup
-		if client.GameID != "" {
-			if gameEngine, exists := s.games[client.GameID]; exists {
-				// Notify other player about disconnect
-				for _, otherClient := range s.clients {
-					if otherClient.GameID == client.GameID && otherClient.ID != client.ID {
-						msg := network.NewMessage(network.MsgDisconnect, otherClient.ID, client.GameID)
-						msg.SetData("disconnect_info", map[string]interface{}{
-							"player_id": client.ID,
-							"reason":    "disconnected",
-						})
-						s.sendMessage(otherClient, msg)
-					}
-				}
-				gameEngine.StopGame()
-				delete(s.games, client.GameID)
-			}
-		}
-
-		conn.Close()
-		s.logger.Info("Client %s disconnected", client.ID)
-	}()
-
 	s.logger.Info("New client connected: %s from %s", client.ID, conn.RemoteAddr())
 
 	// Handle client messages
@@ -176,6 +141,44 @@ func (s *Server) handleClient(conn net.Conn) {
 			s.sendError(client, "PROCESSING_ERROR", err.Error())
 		}
 	}
+
+	// Client disconnected
+	s.mu.Lock()
+	client.IsActive = false
+	
+	// If client was logged in, mark them as inactive
+	if client.Username != "" {
+		if err := s.dataManager.LogoutPlayer(client.Username); err != nil {
+			s.logger.Error("Failed to logout player %s: %v", client.Username, err)
+		}
+	}
+
+	// If client was in a game, handle game cleanup
+	if client.GameID != "" {
+		s.handlePlayerDisconnect(client.GameID, client.ID)
+	}
+
+	// Remove from matchmaking queues
+	s.matchmaking.mu.Lock()
+	for i, c := range s.matchmaking.simpleQueue {
+		if c.ID == client.ID {
+			s.matchmaking.simpleQueue = append(s.matchmaking.simpleQueue[:i], s.matchmaking.simpleQueue[i+1:]...)
+			break
+		}
+	}
+	for i, c := range s.matchmaking.enhancedQueue {
+		if c.ID == client.ID {
+			s.matchmaking.enhancedQueue = append(s.matchmaking.enhancedQueue[:i], s.matchmaking.enhancedQueue[i+1:]...)
+			break
+		}
+	}
+	s.matchmaking.mu.Unlock()
+
+	delete(s.clients, client.ID)
+	s.mu.Unlock()
+
+	conn.Close()
+	s.logger.Info("Client %s disconnected", client.ID)
 }
 
 // processMessage handles incoming messages from clients
@@ -507,14 +510,39 @@ func (s *Server) cleanupInactiveClients() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	timeout := 100 * time.Minute
+	timeout := 2 * time.Minute  // Reduced from 100 minutes to 2 minutes
 	now := time.Now()
 
 	for clientID, client := range s.clients {
 		if now.Sub(client.LastPing) > timeout {
+			s.logger.Info("Client %s (username: %s) inactive for too long, removing", clientID, client.Username)
+			
+			// Handle game cleanup if client was in a game
+			if client.GameID != "" {
+				s.handlePlayerDisconnect(client.GameID, clientID)
+			}
+			
+			// Mark as inactive and remove from matchmaking queues
 			client.IsActive = false
 			client.Conn.Close()
 			delete(s.clients, clientID)
+			
+			// Remove from matchmaking queues
+			s.matchmaking.mu.Lock()
+			for i, c := range s.matchmaking.simpleQueue {
+				if c.ID == clientID {
+					s.matchmaking.simpleQueue = append(s.matchmaking.simpleQueue[:i], s.matchmaking.simpleQueue[i+1:]...)
+					break
+				}
+			}
+			for i, c := range s.matchmaking.enhancedQueue {
+				if c.ID == clientID {
+					s.matchmaking.enhancedQueue = append(s.matchmaking.enhancedQueue[:i], s.matchmaking.enhancedQueue[i+1:]...)
+					break
+				}
+			}
+			s.matchmaking.mu.Unlock()
+			
 			s.logger.Info("Removed inactive client: %s", clientID)
 		}
 	}

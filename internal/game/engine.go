@@ -171,32 +171,61 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		player.Mana -= selectedTroop.MANA
 	}
 
+	// Increment deployment count for all troops
 	if ge.gameState.GameMode == ModeSimple {
 		player.TroopsDeployedThisTurn++
 	}
 
-	// Handle special troops (Queen)
+	// Handle Queen's healing ability
 	if troopName == Queen {
-		action, err := ge.handleQueenSummon(playerID)
-		if err != nil {
-			if ge.gameState.GameMode == ModeSimple {
-				player.TroopsDeployedThisTurn--
+		var lowestTower *Tower
+		lowestHP := math.MaxInt32
+
+		for i := range player.Towers {
+			if player.Towers[i].HP < lowestHP && player.Towers[i].HP > 0 {
+				lowestHP = player.Towers[i].HP
+				lowestTower = &player.Towers[i]
 			}
-			return nil, err
 		}
 
-		// Auto end turn after Queen summon in Simple mode
-		if ge.gameState.GameMode == ModeSimple {
-			go func() {
-				time.Sleep(1 * time.Second)
-				ge.autoEndTurn(playerID)
-			}()
-		}
+		if lowestTower != nil {
+			healAmount := 300
+			if lowestTower.HP+healAmount > lowestTower.MaxHP {
+				healAmount = lowestTower.MaxHP - lowestTower.HP
+			}
 
-		return action, nil
+			oldHP := lowestTower.HP
+			lowestTower.HP += healAmount
+
+			// Create heal event
+			healAction := CombatAction{
+				Type:       ActionHeal,
+				PlayerID:   playerID,
+				TroopName:  Queen,
+				TargetType: "tower",
+				TargetName: string(lowestTower.Name),
+				HealAmount: healAmount,
+				Timestamp:  time.Now(),
+				Data: map[string]interface{}{
+					"tower_hp":    lowestTower.HP,
+					"old_hp":      oldHP,
+					"heal_amount": healAmount,
+				},
+			}
+
+			ge.logEvent("HEAL", playerID, map[string]interface{}{
+				"troop":       Queen,
+				"target":      lowestTower.Name,
+				"heal_amount": healAmount,
+				"tower_hp":    lowestTower.HP,
+				"old_hp":      oldHP,
+			})
+
+			ge.broadcastAction(healAction)
+		}
 	}
 
-	// Create summon event for normal troops
+	// Create summon event
 	action := CombatAction{
 		Type:      ActionSummon,
 		PlayerID:  playerID,
@@ -205,7 +234,7 @@ func (ge *GameEngine) SummonTroop(playerID string, troopName TroopType) (*Combat
 		Data: map[string]interface{}{
 			"mana_left":                 player.Mana,
 			"troops_deployed_this_turn": player.TroopsDeployedThisTurn,
-			"troop_hp":                  selectedTroop.HP, // ✅ ADD: Current HP
+			"troop_hp":                  selectedTroop.HP,
 		},
 	}
 
@@ -241,10 +270,6 @@ func (ge *GameEngine) autoAttackSequence(playerID string, troopName TroopType) {
 	}
 
 	time.Sleep(1 * time.Second)
-	if !ge.checkWinConditions() {
-		// Just continue, no turn ending
-		return
-	}
 }
 
 func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *CombatAction {
@@ -371,10 +396,6 @@ func (ge *GameEngine) executeAutoAttack(playerID string, troopName TroopType) *C
 		ge.broadcastAction(destroyAction)
 
 		ge.handleTowerDestroyed(opponent, targetTower)
-
-		if ge.checkWinConditions() {
-			ge.endGame()
-		}
 	}
 
 	// Create action
@@ -570,34 +591,6 @@ func (ge *GameEngine) awardEXPForDestruction(playerID string, targetType string,
 	}
 }
 
-// autoEndTurn automatically ends turn and switches to opponent
-func (ge *GameEngine) autoEndTurn(playerID string) {
-	if ge.gameState.GameMode != ModeSimple {
-		return
-	}
-
-	if ge.gameState.CurrentTurn != playerID {
-		return
-	}
-
-	ge.switchTurn()
-
-	action := CombatAction{
-		Type:      "TURN_END",
-		PlayerID:  playerID,
-		Timestamp: time.Now(),
-		Data: map[string]interface{}{
-			"next_turn": ge.gameState.CurrentTurn,
-		},
-	}
-
-	ge.logEvent("TURN_END", playerID, map[string]interface{}{
-		"next_turn": ge.gameState.CurrentTurn,
-	})
-
-	ge.broadcastAction(action)
-}
-
 // ExecuteAttack handles manual combat between troops and towers
 func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, targetType, targetName string) (*CombatAction, error) {
 	player := ge.getPlayer(playerID)
@@ -702,13 +695,7 @@ func (ge *GameEngine) ExecuteAttack(playerID string, attackerName TroopType, tar
 	ge.updatePlayerInState(opponent)
 
 	if ge.gameState.GameMode == ModeSimple {
-		go func() {
-			time.Sleep(2 * time.Second)
-			counterAction := ge.executeCounterAttack(playerID, attackerName)
-			if counterAction != nil {
-				ge.broadcastAction(*counterAction)
-			}
-		}()
+		// No automatic turn ending in Simple mode
 	}
 
 	if ge.checkWinConditions() {
@@ -743,6 +730,9 @@ func (ge *GameEngine) validateAttackTargetUpdated(opponent *Player, targetType, 
 // handleQueenSummon handles Queen's special healing ability
 func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) {
 	player := ge.getPlayer(playerID)
+	if player == nil {
+		return nil, fmt.Errorf("player not found")
+	}
 
 	var lowestTower *Tower
 	lowestHP := math.MaxInt32
@@ -763,6 +753,7 @@ func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) 
 		healAmount = lowestTower.MaxHP - lowestTower.HP
 	}
 
+	oldHP := lowestTower.HP
 	lowestTower.HP += healAmount
 
 	action := CombatAction{
@@ -774,8 +765,10 @@ func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) 
 		HealAmount: healAmount,
 		Timestamp:  time.Now(),
 		Data: map[string]interface{}{
-			"tower_hp":  lowestTower.HP,
-			"mana_left": player.Mana,
+			"tower_hp":     lowestTower.HP,
+			"old_hp":       oldHP,
+			"heal_amount":  healAmount,
+			"mana_left":    player.Mana,
 		},
 	}
 
@@ -784,6 +777,7 @@ func (ge *GameEngine) handleQueenSummon(playerID string) (*CombatAction, error) 
 		"target":      lowestTower.Name,
 		"heal_amount": healAmount,
 		"tower_hp":    lowestTower.HP,
+		"old_hp":      oldHP,
 	})
 
 	ge.updatePlayerInState(player)
@@ -816,16 +810,24 @@ func (ge *GameEngine) gameTimeoutHandler() {
 
 // checkWinConditions checks if game should end
 func (ge *GameEngine) checkWinConditions() bool {
+	// Check Player1's King Tower
 	for _, tower := range ge.gameState.Player1.Towers {
 		if tower.Name == KingTower && tower.HP == 0 {
 			ge.gameState.Winner = ge.gameState.Player2.ID
+			ge.logger.Info("Player2 wins - Player1's King Tower destroyed")
+			ge.awardGameEndEXP()
+			ge.endGame()
 			return true
 		}
 	}
 
+	// Check Player2's King Tower
 	for _, tower := range ge.gameState.Player2.Towers {
 		if tower.Name == KingTower && tower.HP == 0 {
 			ge.gameState.Winner = ge.gameState.Player1.ID
+			ge.logger.Info("Player1 wins - Player2's King Tower destroyed")
+			ge.awardGameEndEXP()
+			ge.endGame()
 			return true
 		}
 	}
@@ -843,11 +845,35 @@ func (ge *GameEngine) EndTurn(playerID string) error {
 		return fmt.Errorf("not your turn")
 	}
 
+	// Store old turn for logging
+	oldTurn := ge.gameState.CurrentTurn
+
+	// Switch turn first
 	ge.switchTurn()
 
+	// Create and broadcast turn end event
+	action := CombatAction{
+		Type:      "TURN_END",
+		PlayerID:  playerID,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"next_turn": ge.gameState.CurrentTurn,
+			"old_turn":  oldTurn,
+		},
+	}
+
+	// Log the turn end
 	ge.logEvent("TURN_END", playerID, map[string]interface{}{
 		"next_turn": ge.gameState.CurrentTurn,
+		"old_turn":  oldTurn,
 	})
+
+	// Broadcast the action immediately
+	ge.broadcastAction(action)
+
+	// Update game state
+	ge.updatePlayerInState(&ge.gameState.Player1)
+	ge.updatePlayerInState(&ge.gameState.Player2)
 
 	return nil
 }
@@ -1005,6 +1031,10 @@ func (ge *GameEngine) endGameByTimeout() {
 
 // endGame handles game conclusion
 func (ge *GameEngine) endGame() {
+	if !ge.isRunning {
+		return // Game already ended
+	}
+
 	ge.isRunning = false
 	ge.gameState.Status = StatusFinished
 
@@ -1012,24 +1042,52 @@ func (ge *GameEngine) endGame() {
 		ge.gameTimer.Stop()
 	}
 
+	// Create and broadcast game end event
+	gameEndEvent := CombatAction{
+		Type:      "GAME_END",
+		PlayerID:  ge.gameState.Winner,
+		Timestamp: time.Now(),
+		Data: map[string]interface{}{
+			"winner":         ge.gameState.Winner,
+			"reason":         "king_tower_destroyed",
+			"towers_p1":      ge.gameState.TowersKilled.Player1,
+			"towers_p2":      ge.gameState.TowersKilled.Player2,
+			"player1_exp":    ge.gameState.Player1.EXP,
+			"player2_exp":    ge.gameState.Player2.EXP,
+		},
+	}
+
+	// Send game end event
+	ge.broadcastAction(gameEndEvent)
+
 	ge.logEvent("GAME_END", ge.gameState.Winner, map[string]interface{}{
-		"towers_p1": ge.gameState.TowersKilled.Player1,
-		"towers_p2": ge.gameState.TowersKilled.Player2,
+		"towers_p1":   ge.gameState.TowersKilled.Player1,
+		"towers_p2":   ge.gameState.TowersKilled.Player2,
+		"player1_exp": ge.gameState.Player1.EXP,
+		"player2_exp": ge.gameState.Player2.EXP,
 	})
 }
 
 // switchTurn changes current turn (Simple mode)
 func (ge *GameEngine) switchTurn() {
 	if ge.gameState.GameMode == ModeSimple {
+		// Reset troop deployment counters
 		ge.gameState.Player1.TroopsDeployedThisTurn = 0
 		ge.gameState.Player2.TroopsDeployedThisTurn = 0
 	}
 
+	// Store old turn for logging
+	oldTurn := ge.gameState.CurrentTurn
+
+	// Switch turn
 	if ge.gameState.CurrentTurn == ge.gameState.Player1.ID {
 		ge.gameState.CurrentTurn = ge.gameState.Player2.ID
 	} else {
 		ge.gameState.CurrentTurn = ge.gameState.Player1.ID
 	}
+
+	// Log the turn change
+	ge.logger.Info("Turn switched from %s to %s", oldTurn, ge.gameState.CurrentTurn)
 }
 
 // manaRegeneration handles mana regeneration for Enhanced mode

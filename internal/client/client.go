@@ -37,6 +37,7 @@ type Client struct {
 	deployedThisTurn   []string        // Only troops deployed THIS turn
 	lastWaitingMessage string
 	troopDestroyedTower map[string]bool // Track if a troop destroyed a tower in its last attack
+	troopDestroyedKingTower map[string]bool // Track if a troop destroyed the King Tower in its last attack
 }
 
 // NewClient creates a new client instance
@@ -54,6 +55,7 @@ func NewClient(serverAddr string) *Client {
 		troopAttackCount: make(map[string]int),
 		deployedThisTurn: []string{},
 		troopDestroyedTower: make(map[string]bool),
+		troopDestroyedKingTower: make(map[string]bool),
 	}
 }
 
@@ -135,6 +137,7 @@ func (c *Client) handleTurnChange(msg *network.Message) error {
 
 	c.logger.Debug("Received turn change: %s -> %s", c.gameState.CurrentTurn, currentTurn)
 
+	// Update game state from server
 	if gameStateData, exists := msg.Data["game_state"]; exists {
 		gameStateJson, _ := json.Marshal(gameStateData)
 		if err := json.Unmarshal(gameStateJson, &c.gameState); err != nil {
@@ -142,32 +145,36 @@ func (c *Client) handleTurnChange(msg *network.Message) error {
 		}
 	}
 
-	oldTurn := c.gameState.CurrentTurn
+	// Update current turn
 	c.gameState.CurrentTurn = currentTurn
 
-	if c.gameState.GameMode == game.ModeSimple && currentTurn == c.clientID {
-		c.deployedThisTurn = []string{}
-		c.troopAttackCount = make(map[string]int)
-		// Initialize attack counters for deployed troops
-		for troopName := range c.deployedTroops {
-			c.troopAttackCount[troopName] = 0
+	if c.gameState.GameMode == game.ModeSimple {
+		// Clear any existing waiting messages
+		c.lastWaitingMessage = ""
+
+		if currentTurn == c.clientID {
+			// Reset turn-specific state
+			c.deployedThisTurn = []string{}
+			c.troopAttackCount = make(map[string]int)
+			// Initialize attack counters for deployed troops
+			for troopName := range c.deployedTroops {
+				c.troopAttackCount[troopName] = 0
+			}
+			
+			// Display turn start message
+			c.display.PrintSeparator()
+			c.display.PrintInfo("🔥 It's YOUR TURN! 🔥")
+			c.display.PrintInfo("Available actions: play, attack, info, debug, end, surrender")
+			c.display.PrintInfo("💡 Remember: 1 troop deployment per turn, each deployed troop can attack once")
+			c.display.PrintSeparator()
+		} else {
+			opponentName := c.getPlayerName(currentTurn)
+			c.display.PrintSeparator()
+			c.display.PrintInfo(fmt.Sprintf("⏳ Waiting for %s's turn...", opponentName))
+			c.display.PrintInfo("You can use 'info' or 'debug' to check game status")
+			c.display.PrintSeparator()
 		}
 	}
-
-	c.display.PrintSeparator()
-	c.display.PrintInfo(fmt.Sprintf("🔄 TURN CHANGE: %s → %s",
-		c.getPlayerName(oldTurn), c.getPlayerName(currentTurn)))
-
-	if currentTurn == c.clientID {
-		c.display.PrintInfo("🔥 It's YOUR TURN! 🔥")
-		c.display.PrintInfo("Available actions: play, attack, info, debug, end, surrender")
-		c.display.PrintInfo("💡 Remember: 1 troop deployment per turn, each deployed troop can attack once")
-	} else {
-		opponentName := c.getPlayerName(currentTurn)
-		c.display.PrintInfo(fmt.Sprintf("⏳ Waiting for %s's turn...", opponentName))
-		c.display.PrintInfo("You can use 'info' or 'debug' to check game status")
-	}
-	c.display.PrintSeparator()
 
 	c.logger.Debug("Turn change processed: Current turn is now %s", c.gameState.CurrentTurn)
 	return nil
@@ -534,7 +541,7 @@ func (c *Client) connectToServer() error {
 func (c *Client) authenticate() error {
 	for {
 		c.display.PrintSeparator()
-		c.display.PrintInfo("🔐 AUTHENTICATION asdadasdasasd 🔐")
+		c.display.PrintInfo("🔐 AUTHENTICATION mossos 🔐")
 		c.display.PrintInfo("1. Login")
 		c.display.PrintInfo("2. Register")
 		c.display.PrintInfo("3. Quit")
@@ -696,6 +703,7 @@ func (c *Client) resetGameTracking() {
 	c.deployedThisTurn = []string{}
 	c.lastWaitingMessage = ""
 	c.troopDestroyedTower = make(map[string]bool)
+	c.troopDestroyedKingTower = make(map[string]bool)
 }
 
 // findMatch initiates matchmaking
@@ -1088,8 +1096,8 @@ func (c *Client) handleAttack() error {
 			if c.deployedTroops[troopName] && troop.HP > 0 {
 				// Allow attack if:
 				// 1. Troop hasn't attacked this turn OR
-				// 2. Troop destroyed a tower in its last attack
-				if c.troopAttackCount[troopName] < 1 || c.troopDestroyedTower[troopName] {
+				// 2. Troop destroyed a tower in its last attack AND it wasn't the King Tower
+				if c.troopAttackCount[troopName] < 1 || (c.troopDestroyedTower[troopName] && !c.troopDestroyedKingTower[troopName]) {
 					availableTroops = append(availableTroops, troop)
 				}
 			}
@@ -1262,8 +1270,7 @@ func (c *Client) handleEndTurn() error {
 	c.display.PrintInfo("Checking turn status...")
 
 	if c.gameState.CurrentTurn != c.clientID {
-		opponentName := c.getPlayerName(c.gameState.CurrentTurn)
-		c.display.PrintError(fmt.Sprintf("❌ Cannot end turn: It's %s's turn", opponentName))
+		// Just return, don't show error
 		return nil
 	}
 
@@ -1281,7 +1288,7 @@ func (c *Client) handleEndTurn() error {
 	c.display.PrintInfo("📤 End turn message sent. Waiting for server response...")
 	c.logger.Debug("End turn message sent successfully")
 
-	time.Sleep(1000 * time.Millisecond)
+	// Do NOT update local state here. Wait for server's turn change message.
 	return nil
 }
 
@@ -1519,7 +1526,14 @@ func (c *Client) handleGameEvent(msg *network.Message) error {
 				if event.PlayerID == c.clientID {
 					troopName := string(event.TroopName)
 					c.troopDestroyedTower[troopName] = true
-					c.display.PrintInfo(fmt.Sprintf("🎯 %s destroyed a tower and can attack again!", troopName))
+					
+					// Check if it was the King Tower
+					if event.TargetName == string(game.KingTower) {
+						c.troopDestroyedKingTower[troopName] = true
+						c.display.PrintInfo(fmt.Sprintf("👑 %s destroyed the King Tower! This was the final blow!", troopName))
+					} else {
+						c.display.PrintInfo(fmt.Sprintf("🎯 %s destroyed a tower and can attack again!", troopName))
+					}
 				}
 				// Always print a clear destruction message
 				c.display.PrintTowerDestroyed(string(event.TroopName), event.TargetName, "opponent", event.PlayerID == c.clientID)
@@ -1681,4 +1695,16 @@ func (c *Client) startRealTimeTimer() {
 			}
 		}
 	}()
+}
+
+// getOpponentID returns the ID of the opponent player
+func (c *Client) getOpponentID() string {
+	if c.gameState == nil {
+		return ""
+	}
+
+	if c.gameState.Player1.ID == c.clientID {
+		return c.gameState.Player2.ID
+	}
+	return c.gameState.Player1.ID
 }
