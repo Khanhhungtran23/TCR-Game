@@ -3,23 +3,23 @@
     {
       "username": "khanhhung",
       "password": "1234",
-      "level": 2,
+      "level": 3,
       "exp": 50,
       "troop_levels": {
-        "Bishop": 2,
-        "Knight": 2,
-        "Pawn": 2,
-        "Prince": 2,
-        "Queen": 2,
-        "Rook": 2
+        "Bishop": 3,
+        "Knight": 3,
+        "Pawn": 3,
+        "Prince": 3,
+        "Queen": 3,
+        "Rook": 3
       },
       "tower_levels": {
-        "Guard Tower": 2,
-        "King Tower": 2
+        "Guard Tower": 3,
+        "King Tower": 3
       },
-      "games_played": 9,
+      "games_played": 14,
       "games_won": 3,
-      "last_login": "2025-05-30T01:15:15.4957439+07:00",
+      "last_login": "2025-05-30T06:17:55.1970451+07:00",
       "is_active": false
     },
     {
@@ -47,24 +47,24 @@
     {
       "username": "hung",
       "password": "1234",
-      "level": 7,
-      "exp": 153,
+      "level": 8,
+      "exp": 102,
       "troop_levels": {
-        "Bishop": 7,
-        "Knight": 7,
-        "Pawn": 7,
-        "Prince": 7,
-        "Queen": 7,
-        "Rook": 7
+        "Bishop": 8,
+        "Knight": 8,
+        "Pawn": 8,
+        "Prince": 8,
+        "Queen": 8,
+        "Rook": 8
       },
       "tower_levels": {
-        "Guard Tower 1": 7,
-        "Guard Tower 2": 7,
-        "King Tower": 7
+        "Guard Tower 1": 8,
+        "Guard Tower 2": 8,
+        "King Tower": 8
       },
-      "games_played": 25,
-      "games_won": 13,
-      "last_login": "2025-05-30T01:15:07.9099978+07:00",
+      "games_played": 30,
+      "games_won": 14,
+      "last_login": "2025-05-30T06:17:45.9944129+07:00",
       "is_active": false
     },
     {
@@ -88,6 +88,29 @@
       "games_played": 22,
       "games_won": 1,
       "last_login": "2025-05-28T23:27:55.295996+07:00",
+      "is_active": false
+    },
+    {
+      "username": "vohoaibao",
+      "password": "1234",
+      "level": 1,
+      "exp": 0,
+      "troop_levels": {
+        "Bishop": 1,
+        "Knight": 1,
+        "Pawn": 1,
+        "Prince": 1,
+        "Queen": 1,
+        "Rook": 1
+      },
+      "tower_levels": {
+        "Guard Tower 1": 1,
+        "Guard Tower 2": 1,
+        "King Tower": 1
+      },
+      "games_played": 0,
+      "games_won": 0,
+      "last_login": "2025-05-30T06:00:58.6408201+07:00",
       "is_active": false
     }
   ]

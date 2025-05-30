@@ -541,7 +541,7 @@ func (c *Client) connectToServer() error {
 func (c *Client) authenticate() error {
 	for {
 		c.display.PrintSeparator()
-		c.display.PrintInfo("🔐 AUTHENTICATION mossos 🔐")
+		c.display.PrintInfo("🔐 AUTHENTICATION 🔐")
 		c.display.PrintInfo("1. Login")
 		c.display.PrintInfo("2. Register")
 		c.display.PrintInfo("3. Quit")
